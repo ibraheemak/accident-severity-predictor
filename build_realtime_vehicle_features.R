@@ -1,8 +1,15 @@
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-INPUT_VEHICLE_CSV <- "data/raw/stats19_20260606_181720/codes/stats19_20260606_181720_vehicles.csv"
+# PIPELINE_DATA_DIR may be set by run_pipeline.R; otherwise falls back to a fixed run.
+if (!exists("PIPELINE_DATA_DIR")) {
+  PIPELINE_DATA_DIR <- "data/raw/stats19_20260606_181720"
+}
+INPUT_VEHICLE_CSV <- file.path(
+  PIPELINE_DATA_DIR, "codes",
+  paste0(basename(PIPELINE_DATA_DIR), "_vehicles.csv")
+)
 
-OUTPUT_DIR  <- "data/features"
-OUTPUT_FILE <- "vehicle_realtime_features.csv"
+OUTPUT_DIR  <- "data/features/stats19"
+OUTPUT_FILE <- "stats19_vehicle_realtime_features.csv"
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Realtime columns to keep (from docs/realtime features) ───────────────────

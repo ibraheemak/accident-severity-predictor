@@ -84,7 +84,7 @@ Reads the **codes** collisions CSV and selects only columns that will be
 available in real time at inference (i.e. excludes columns that require
 post-collision investigation).
 
-### Output: `data/features/collision_realtime_features.csv`
+### Output: `data/features/stats19/stats19_collision_realtime_features.csv`
 One row per sampled collision. Columns are grouped into:
 
 | Group | Columns | Purpose |
@@ -138,7 +138,7 @@ binary flags (since a collision can involve multiple vehicles).
 | `has_towing` | any vehicle has `towing_and_articulation` in 1–5 |
 | `has_escooter` | any vehicle has `escooter_flag == 1` |
 
-### Output: `data/features/vehicle_realtime_features.csv`
+### Output: `data/features/stats19/stats19_vehicle_realtime_features.csv`
 82,491 rows (one per collision) × 16 columns (`collision_index` + 15 flags).
 Flag prevalence on the 2020–2025 sample: `has_car` 84.8%, `has_motorcycle`
 17.7%, `has_pedal_cycle` 15.3%, `has_van` 10.9%, `has_hgv` 4.8%, `has_bus_coach`
@@ -147,10 +147,20 @@ Flag prevalence on the 2020–2025 sample: `has_car` 84.8%, `has_motorcycle`
 
 ---
 
-## 5. Next steps (not yet done)
+## 5. Combined Feature Table — `build_combined_features.R`
 
-- Join `collision_realtime_features.csv` with `vehicle_realtime_features.csv`
-  on `collision_index` to produce the final model-ready feature table.
+Left-joins the collision and vehicle realtime feature tables on `collision_index`
+into a single model-ready file.
+
+### Output: `data/features/stats19/stats19_combined_realtime_features.csv`
+82,491 rows × 38 columns (23 collision columns + 15 vehicle flags, minus the
+duplicate join key). Every sampled collision has a matching vehicle row, so no
+NAs are introduced by the join.
+
+---
+
+## 6. Next steps (not yet done)
+
 - Decide treatment for `light_conditions` / `weather_conditions` (replace with
   external API at inference; for training, decide whether to keep STATS19
   values or also source historical weather externally for consistency).

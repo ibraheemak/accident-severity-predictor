@@ -1,10 +1,17 @@
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # Path to the codes collision CSV produced by stats19_download.R
-INPUT_COLLISION_CSV <- "data/raw/stats19_20260606_181720/codes/stats19_20260606_181720_collisions.csv"
+# PIPELINE_DATA_DIR may be set by run_pipeline.R; otherwise falls back to a fixed run.
+if (!exists("PIPELINE_DATA_DIR")) {
+  PIPELINE_DATA_DIR <- "data/raw/stats19_20260606_181720"
+}
+INPUT_COLLISION_CSV <- file.path(
+  PIPELINE_DATA_DIR, "codes",
+  paste0(basename(PIPELINE_DATA_DIR), "_collisions.csv")
+)
 
 # Where to write the realtime features table
-OUTPUT_DIR  <- "data/features"
-OUTPUT_FILE <- "collision_realtime_features.csv"
+OUTPUT_DIR  <- "data/features/stats19"
+OUTPUT_FILE <- "stats19_collision_realtime_features.csv"
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Column groups (from docs/realtime features) ───────────────────────────────
