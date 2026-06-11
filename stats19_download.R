@@ -63,6 +63,34 @@ severity_sample <- function(df, severity_col, serious_cap, slight_cap, seed) {
   bind_rows(fatal, serious, slight)
 }
 
+#' Merge *_historic columns into their primary column then drop them.
+#' Replicates the step format_collisions() does automatically, so the codes
+#' version is consistent with the labels version.
+#'
+#' Pedestrian crossing special case:
+#'   DfT already pre-populates `pedestrian_crossing` (new unified column) in
+#'   all raw CSVs, so both _historic columns are simply dropped. The 684 NAs
+#'   that remain are genuinely unrecoverable (historic columns also blank).
+#'
+#' All other *_historic columns:
+#'   Values are backfilled into the primary column where NA, then dropped.
+merge_historic_cols <- function(df) {
+  # Drop pedestrian crossing _historic cols — pedestrian_crossing already correct
+  df$pedestrian_crossing_human_control_historic      <- NULL
+  df$pedestrian_crossing_physical_facilities_historic <- NULL
+
+  # Generic backfill-and-drop for all remaining *_historic columns
+  historic_cols <- names(df)[grepl("_historic$", names(df))]
+  for (hcol in historic_cols) {
+    primary_col <- gsub("_historic$", "", hcol)
+    if (primary_col %in% names(df)) {
+      df[[primary_col]] <- ifelse(is.na(df[[primary_col]]), df[[hcol]], df[[primary_col]])
+      df[[hcol]] <- NULL
+    }
+  }
+  df
+}
+
 #' Safely call get_stats19(); returns NULL and logs on any error.
 #' format=TRUE  -> human-readable string labels (for EDA / reports)
 #' format=FALSE -> raw numeric codes            (for ML pipeline)
@@ -139,15 +167,15 @@ process_year <- function(year) {
 
   sampled_ids <- col_lbl_sampled[[INDEX_COL]]
 
-  # ── Collisions: numeric codes — filter and match row order of labels version ──
+  # ── Collisions: numeric codes — filter, merge historic cols, match row order ──
   message("  Downloading collisions (codes)...")
   col_cod <- fetch_table(year, COLLISION_TYPE, format = FALSE)
   if (is.null(col_cod)) return(null_result("collision codes empty or download failed"))
-  # Reorder codes to match the exact row order produced by severity_sample on labels
+  col_cod <- merge_historic_cols(col_cod)
   col_cod_sampled <- col_lbl_sampled[, INDEX_COL, drop = FALSE] |>
     left_join(col_cod, by = INDEX_COL)
 
-  # ── Casualties — filter both versions, sort both by collision_index ──
+  # ── Casualties — filter both versions, merge historic cols, sort by index ──
   message("  Downloading casualties (labels)...")
   cas_lbl <- fetch_table(year, CASUALTY_TYPE, format = TRUE)
   if (is.null(cas_lbl)) return(null_result("casualty labels empty or download failed"))
@@ -157,13 +185,14 @@ process_year <- function(year) {
   message("  Downloading casualties (codes)...")
   cas_cod <- fetch_table(year, CASUALTY_TYPE, format = FALSE)
   if (is.null(cas_cod)) return(null_result("casualty codes empty or download failed"))
-  cas_cod <- cas_cod |> filter(.data[[INDEX_COL]] %in% sampled_ids) |>
+  cas_cod <- merge_historic_cols(cas_cod) |>
+    filter(.data[[INDEX_COL]] %in% sampled_ids) |>
     arrange(.data[[INDEX_COL]])
 
   info$casualty_rows <- nrow(cas_lbl)
   message(sprintf("  %d casualty rows matched.", nrow(cas_lbl)))
 
-  # ── Vehicles — filter both versions, sort both by collision_index ──
+  # ── Vehicles — filter both versions, merge historic cols, sort by index ──
   message("  Downloading vehicles (labels)...")
   veh_lbl <- fetch_table(year, VEHICLE_TYPE, format = TRUE)
   if (is.null(veh_lbl)) return(null_result("vehicle labels empty or download failed"))
@@ -173,7 +202,8 @@ process_year <- function(year) {
   message("  Downloading vehicles (codes)...")
   veh_cod <- fetch_table(year, VEHICLE_TYPE, format = FALSE)
   if (is.null(veh_cod)) return(null_result("vehicle codes empty or download failed"))
-  veh_cod <- veh_cod |> filter(.data[[INDEX_COL]] %in% sampled_ids) |>
+  veh_cod <- merge_historic_cols(veh_cod) |>
+    filter(.data[[INDEX_COL]] %in% sampled_ids) |>
     arrange(.data[[INDEX_COL]])
 
   info$vehicle_rows <- nrow(veh_lbl)

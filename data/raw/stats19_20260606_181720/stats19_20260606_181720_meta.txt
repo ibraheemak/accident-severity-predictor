@@ -1,6 +1,6 @@
 STATS19 Download & Sample — Metadata
 ==================================================
-Run timestamp : 20260606_114149
+Run timestamp : 20260606_181720
 YEARS config  : 2020, 2021, 2022, 2023, 2024, 2025
 SERIOUS_CAP   : 5000 per year
 SLIGHT_CAP    : 10000 per year
@@ -8,12 +8,12 @@ RANDOM_SEED   : 42
 
 Output files
 ------------------------------
-  labels/collisions : data/raw/stats19_20260606_114149/labels/stats19_20260606_114149_collisions.csv
-  labels/casualties : data/raw/stats19_20260606_114149/labels/stats19_20260606_114149_casualties.csv
-  labels/vehicles   : data/raw/stats19_20260606_114149/labels/stats19_20260606_114149_vehicles.csv
-  codes/collisions  : data/raw/stats19_20260606_114149/codes/stats19_20260606_114149_collisions.csv
-  codes/casualties  : data/raw/stats19_20260606_114149/codes/stats19_20260606_114149_casualties.csv
-  codes/vehicles    : data/raw/stats19_20260606_114149/codes/stats19_20260606_114149_vehicles.csv
+  labels/collisions : data/raw/stats19_20260606_181720/labels/stats19_20260606_181720_collisions.csv
+  labels/casualties : data/raw/stats19_20260606_181720/labels/stats19_20260606_181720_casualties.csv
+  labels/vehicles   : data/raw/stats19_20260606_181720/labels/stats19_20260606_181720_vehicles.csv
+  codes/collisions  : data/raw/stats19_20260606_181720/codes/stats19_20260606_181720_collisions.csv
+  codes/casualties  : data/raw/stats19_20260606_181720/codes/stats19_20260606_181720_casualties.csv
+  codes/vehicles    : data/raw/stats19_20260606_181720/codes/stats19_20260606_181720_vehicles.csv
 
 Per-year summary
 ------------------------------

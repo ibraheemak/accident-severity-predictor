@@ -1,0 +1,34 @@
+Collision table :
+collision_index  #Infrastructure (never fed into ML)
+collision_year  #Infrastructure (never fed into ML)
+longitude   #Infrastructure (never fed into ML)
+latitude    #Infrastructure (never fed into ML)
+collision_severity
+number_of_vehicles
+date    #Infrastructure (never fed into ML)
+day_of_week
+time
+first_road_class
+first_road_number
+road_type
+speed_limit
+junction_detail
+junction_control
+second_road_class.  
+second_road_number
+pedestrian_crossing
+light_conditions    #will be Replaced by External Source (kept for comparison only)
+weather_conditions  #will be Replaced by External Source (kept for comparison only)
+urban_or_rural_area
+trunk_road_flag
+
+---------------------------------------
+vehicle table :
+
+collision_index #Infrastructure (never fed into ML)
+vehicle_type - combine: Motorcycles[2-5,23,97] , car[8+9] , Heavy goods vehicles[20,21,98], 
+towing_and_articulation
+escooter_flag
+
+
+
