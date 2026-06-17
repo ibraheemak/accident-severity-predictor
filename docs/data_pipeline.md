@@ -159,7 +159,82 @@ NAs are introduced by the join.
 
 ---
 
-## 6. Next steps (not yet done)
+## 6. AADF Traffic Volume Join — `join_aadf.R`
+
+Enriches every accident with an annual average daily flow (AADF) traffic volume
+figure from the DfT count-point dataset, using a spatial + road-name join.
+
+### Source data
+```
+data/raw/aadf/dft_traffic_counts_aadf.csv
+```
+Columns used: `count_point_id`, `year`, `latitude`, `longitude`, `road_name`,
+`all_motor_vehicles`.
+
+### Road ID construction
+
+Each accident's `first_road_class` and `second_road_class` are numeric codes in
+Stats19. The script maps them to a letter prefix and concatenates with the road
+number to build identifiers that match AADF's `road_name` field:
+
+| Code | Class | Prefix | Example |
+|------|-------|--------|---------|
+| 1 | Motorway | M | M6 |
+| 2 | A(M) | A | A1(M) → A1 |
+| 3 | A | A | A461 |
+| 4 | B | B | B4009 |
+| 5 | C | C | C12 |
+| 6 | Unclassified | U | U1234 |
+
+Two IDs are built per accident:
+- `accident_road_id` — from `first_road_class` + `first_road_number`
+- `accident_road_id_2` — from `second_road_class` + `second_road_number`
+  (NA when the accident is not at a junction or has no second road)
+
+### Matching logic (per accident, same year only)
+
+Three steps, tried in order, stopping at the first that succeeds:
+
+1. **Same road (primary)** — filter AADF count points to those whose `road_name`
+   equals `accident_road_id` exactly. If any exist, pick the geographically
+   nearest one (no distance threshold). → `aadf_match_type = "same_road"`
+
+2. **Same road (secondary)** — if step 1 found zero count points, repeat with
+   `accident_road_id_2`. → `aadf_match_type = "same_road"`
+
+3. **Nearest fallback** — if neither road exists in AADF at all, find the
+   nearest count point on any road (no distance threshold).
+   → `aadf_match_type = "nearest_fallback"`
+
+No accident is left unmatched (the nearest-fallback always finds something).
+The `aadf_distance_m` column records the actual distance in metres for every
+match; the model can use this as a reliability signal or apply its own threshold.
+
+### New columns added
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `aadf_traffic_volume` | integer | Annual average daily flow (all motor vehicles) from the matched count point |
+| `aadf_distance_m` | double | Distance in metres from the accident to the matched count point |
+| `aadf_match_type` | character | `"same_road"` or `"nearest_fallback"` |
+
+### Output: `data/features/stats19+aadf/stats19+aadf_combined_realtime_features.csv`
+Same rows as `stats19_combined_realtime_features.csv` plus the three new columns
+above. Row order is preserved.
+
+### Logging
+Every run writes a full log to `data/features/stats19+aadf/join_aadf.log`, including match-type
+counts per year and a distance-distribution table bucketed at
+`<100 m / 100–200 m / 200–300 m / 300–500 m / 500 m–1 km / 1–2 km / 2–5 km / >5 km`.
+
+### Debug mode
+Set `DEBUG <- TRUE` at the top of the script to process only `DEBUG_N_ACC`
+accidents from `DEBUG_YEAR`. Per-accident detail (road IDs tried, candidate
+counts, distances) is written to `join_aadf.log` at `[DEBUG]` level.
+
+---
+
+## 7. Next steps (not yet done)
 
 - Decide treatment for `light_conditions` / `weather_conditions` (replace with
   external API at inference; for training, decide whether to keep STATS19
