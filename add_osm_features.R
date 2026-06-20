@@ -20,11 +20,25 @@ suppressPackageStartupMessages({
   library(readr)
 })
 
+# osmextract is used for road_ways (national-scale; Overpass times out).
+# Install automatically if missing.
+if (!requireNamespace("osmextract", quietly = TRUE)) {
+  message("Installing osmextract …")
+  install.packages("osmextract", repos = "https://cloud.r-project.org")
+}
+suppressPackageStartupMessages(library(osmextract))
+
 # ── Debug flag ─────────────────────────────────────────────────────────────────
 args  <- commandArgs(trailingOnly = TRUE)
 DEBUG <- "--debug" %in% args
 DEBUG_N          <- 50L    # accidents to process in debug mode
 DEBUG_BBOX_PAD_M <- 15000  # bbox padded this many metres around the cluster centroid
+
+# Geofabrik PBF URL for the osmextract full-run path.
+# Geofabrik does not publish a separate England extract; only great-britain-latest
+# is available.  Debug mode bypasses osmextract entirely and uses Overpass instead
+# (the debug bbox is small enough that Overpass handles it without timeouts).
+GEOFABRIK_URL <- "https://download.geofabrik.de/europe/great-britain-latest.osm.pbf"
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 INPUT_FILE <- "data/features/stats19+aadf/stats19+aadf_combined_realtime_features.csv"
@@ -220,7 +234,7 @@ log_msg(sprintf("  Approx bbox area: %.0f km²", bbox_area_km2))
 OVERPASS_SERVERS <- c(
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.openstreetmap.fr/api/interpreter"
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
 )
 
 fetch_or_cache <- function(key, download_fn, max_retries = 3L) {
@@ -232,7 +246,10 @@ fetch_or_cache <- function(key, download_fn, max_retries = 3L) {
 
   for (attempt in seq_len(max_retries)) {
     server <- OVERPASS_SERVERS[((attempt - 1L) %% length(OVERPASS_SERVERS)) + 1L]
-    set_overpass_url(server)
+    # osmdata 0.4.x reads from options("osmdata.base_url"), NOT "osmdata_overpass_url".
+    # set_overpass_url() also pings the server before setting it, which can block
+    # for minutes. Setting the option directly bypasses both problems.
+    options(osmdata.base_url = server)
     log_msg(sprintf("  [Overpass] %s — attempt %d/%d via %s …",
       key, attempt, max_retries, server))
 
@@ -295,19 +312,25 @@ traffic_calm_osm <- fetch_or_cache("traffic_calming", function() {
     osmdata_sf()
 })
 
-road_ways_osm <- fetch_or_cache("road_ways", function() {
-  log_msg("  Querying only driveable highway types: ",
-          paste(DRIVEABLE_HIGHWAY_TYPES, collapse = ", "))
-  opq(bbox = bbox_wgs84, timeout = 600, memsize = OVERPASS_MEMSIZE) |>
-    add_osm_feature(key = "highway", value = DRIVEABLE_HIGHWAY_TYPES) |>
-    osmdata_sf()
-})
+# road_ways + barrier_ways strategy:
+#   Debug mode  — Overpass with the small clamped bbox (works fine, no timeouts).
+#   Full run    — osmextract/Geofabrik PBF (national scale exceeds Overpass limits).
+road_ways_osm    <- NULL   # populated below for debug mode
+barrier_ways_osm <- NULL   # populated below for debug mode
 
-barrier_ways_osm <- fetch_or_cache("barrier_ways", function() {
-  opq(bbox = bbox_wgs84, timeout = 300, memsize = OVERPASS_MEMSIZE) |>
-    add_osm_feature(key = "barrier") |>
-    osmdata_sf()
-})
+if (DEBUG) {
+  road_ways_osm <- fetch_or_cache("road_ways", function() {
+    opq(bbox = bbox_wgs84, timeout = 300, memsize = OVERPASS_MEMSIZE) |>
+      add_osm_feature(key = "highway", value = DRIVEABLE_HIGHWAY_TYPES) |>
+      osmdata_sf()
+  })
+
+  barrier_ways_osm <- fetch_or_cache("barrier_ways", function() {
+    opq(bbox = bbox_wgs84, timeout = 300, memsize = OVERPASS_MEMSIZE) |>
+      add_osm_feature(key = "barrier") |>
+      osmdata_sf()
+  })
+}
 
 # ── 6. Prepare sf objects ──────────────────────────────────────────────────────
 step("6. Prepare OSM sf objects")
@@ -336,10 +359,99 @@ prepare_nodes <- function(osm_obj) {
   pt |> st_transform(BNG_CRS)
 }
 
-road_ways          <- prepare_ways(road_ways_osm)
-barrier_ways       <- prepare_ways(barrier_ways_osm)
 speed_cam_nodes    <- prepare_nodes(speed_cam_osm)
 traffic_calm_nodes <- prepare_nodes(traffic_calm_osm)
+
+# ── HSTORE parser for osmextract other_tags column ────────────────────────────
+# osmextract stores non-default tags in an OGR HSTORE field:
+#   "key1"=>"val1","key2"=>"val2",...
+# Using extra_tags in oe_read() modifies osmconf.ini and can break vectortranslate.
+# Parsing other_tags in R is more robust and version-agnostic.
+hstore_get <- function(hstore_vec, key) {
+  pat  <- paste0('"', key, '"=>"([^"]*)"')
+  m    <- regexpr(pat, hstore_vec, perl = TRUE)
+  out  <- rep(NA_character_, length(hstore_vec))
+  ok   <- !is.na(m) & m > 0
+  if (any(ok)) {
+    starts  <- attr(m, "capture.start")[ok]
+    lengths <- attr(m, "capture.length")[ok]
+    out[ok] <- substr(hstore_vec[ok], starts, starts + lengths - 1L)
+  }
+  out
+}
+
+# ── osmextract helper (full run only; debug uses Overpass above) ───────────────
+# Reads a layer from the Geofabrik PBF via oe_read(), caches result as RDS.
+# No extra_tags: we rely on the default other_tags HSTORE column to get ref,
+# lanes, surface, etc., which avoids osmconf.ini modification and vectortranslate
+# failures caused by unrecognised extra_tags in some osmextract/GDAL versions.
+osmextract_layer <- function(key, layer, sql, target_crs) {
+  cache_path <- file.path(CACHE_DIR, paste0(key, ".rds"))
+  if (file.exists(cache_path)) {
+    log_msg("  [cache hit] ", key)
+    return(readRDS(cache_path))
+  }
+  log_msg(sprintf("  [osmextract] %s — downloading/converting PBF (first run only) …", key))
+  t1 <- Sys.time()
+  result <- oe_read(
+    file_path          = GEOFABRIK_URL,
+    layer              = layer,
+    extra_tags         = character(0),
+    download_directory = CACHE_DIR,
+    quiet              = FALSE,
+    query              = sql
+  ) |> st_transform(target_crs)
+  if (!"osm_id" %in% names(result)) result$osm_id <- rownames(result)
+  elapsed <- as.numeric(Sys.time() - t1, units = "secs")
+  log_msg(sprintf("  [osmextract] %s: %d features in %.1fs", key, nrow(result), elapsed))
+  saveRDS(result, cache_path)
+  result
+}
+
+# ── road_ways ─────────────────────────────────────────────────────────────────
+if (DEBUG) {
+  road_ways <- prepare_ways(road_ways_osm)
+} else {
+  road_ways_raw <- osmextract_layer(
+    key        = "road_ways_raw",
+    layer      = "lines",
+    sql        = sprintf(
+      "SELECT osm_id, highway, other_tags, geometry FROM lines WHERE highway IN ('%s')",
+      paste(DRIVEABLE_HIGHWAY_TYPES, collapse = "', '")
+    ),
+    target_crs = BNG_CRS
+  )
+  if (!is.null(road_ways_raw) && nrow(road_ways_raw) > 0) {
+    ot <- if ("other_tags" %in% names(road_ways_raw)) road_ways_raw$other_tags else NA_character_
+    road_ways <- road_ways_raw |>
+      mutate(
+        ref     = hstore_get(ot, "ref"),
+        lanes   = hstore_get(ot, "lanes"),
+        surface = hstore_get(ot, "surface"),
+        bridge  = hstore_get(ot, "bridge"),
+        tunnel  = hstore_get(ot, "tunnel"),
+        width   = hstore_get(ot, "width"),
+        divider = hstore_get(ot, "divider")
+      )
+    if ("other_tags" %in% names(road_ways)) road_ways$other_tags <- NULL
+  } else {
+    road_ways <- road_ways_raw
+  }
+  road_ways <- select_existing(road_ways,
+    c("osm_id", "ref", "highway", "lanes", "surface", "bridge", "tunnel", "width", "divider"))
+}
+
+# ── barrier_ways ──────────────────────────────────────────────────────────────
+if (DEBUG) {
+  barrier_ways <- prepare_ways(barrier_ways_osm)
+} else {
+  barrier_ways <- osmextract_layer(
+    key        = "barrier_ways",
+    layer      = "lines",
+    sql        = "SELECT osm_id, barrier, geometry FROM lines WHERE barrier IS NOT NULL",
+    target_crs = BNG_CRS
+  )
+}
 
 log_msg("  OSM object counts:")
 for (item in list(
@@ -655,26 +767,94 @@ output <- accidents |>
 
 log_msg(sprintf("  Output table: %d rows × %d cols", nrow(output), ncol(output)))
 
-# ── 15. Fill-rate summary ──────────────────────────────────────────────────────
+# ── 15. Feature statistics ────────────────────────────────────────────────────
 new_cols <- c(
   "has_speed_camera", "dist_to_speed_camera_m", "lane_count",
   "has_median", "has_traffic_calming", "road_surface_material",
   "is_bridge", "is_tunnel", "road_width_m"
 )
-log_msg("  Fill rates for new OSM columns:")
-for (col in intersect(new_cols, names(output))) {
-  pct <- round(100 * mean(!is.na(output[[col]])), 1)
-  log_msg(sprintf("    %-30s %5.1f%%", col, pct))
+n <- nrow(output)
+
+log_msg(sprintf("  ── OSM feature statistics (n = %d) ──", n))
+
+# helper: count and percentage of non-NA values
+fill_str <- function(x) {
+  k <- sum(!is.na(x))
+  sprintf("%d / %d (%.1f%%)", k, n, 100 * k / n)
+}
+
+# ── binary features ────────────────────────────────────────────────────────────
+for (col in c("has_speed_camera", "has_median", "has_traffic_calming",
+              "is_bridge", "is_tunnel")) {
+  if (!col %in% names(output)) next
+  x   <- output[[col]]
+  yes <- sum(x == 1L, na.rm = TRUE)
+  no  <- sum(x == 0L, na.rm = TRUE)
+  log_msg(sprintf("  %-28s  yes=%d (%.1f%%)  no=%d (%.1f%%)  NA=%d",
+    col,
+    yes, 100 * yes / n,
+    no,  100 * no  / n,
+    sum(is.na(x))))
+}
+
+# ── speed camera distance (continuous, only where has_speed_camera = 1) ────────
+if ("dist_to_speed_camera_m" %in% names(output)) {
+  d <- output$dist_to_speed_camera_m[!is.na(output$dist_to_speed_camera_m)]
+  if (length(d) > 0) {
+    log_msg(sprintf("  %-28s  n=%d  min=%.0fm  median=%.0fm  mean=%.0fm  max=%.0fm",
+      "dist_to_speed_camera_m",
+      length(d), min(d), median(d), mean(d), max(d)))
+  } else {
+    log_msg("  dist_to_speed_camera_m   no observations")
+  }
+}
+
+# ── lane count (numeric — distribution of common values) ──────────────────────
+if ("lane_count" %in% names(output)) {
+  lc <- output$lane_count[!is.na(output$lane_count)]
+  log_msg(sprintf("  %-28s  filled=%s", "lane_count", fill_str(output$lane_count)))
+  if (length(lc) > 0) {
+    tbl <- sort(table(lc), decreasing = TRUE)
+    top <- head(tbl, 6)
+    log_msg(sprintf("    distribution: %s",
+      paste(sprintf("%s lanes: %d", names(top), as.integer(top)), collapse = "  |  ")))
+    log_msg(sprintf("    median=%.0f  mean=%.1f  range=[%d, %d]",
+      median(lc), mean(lc), min(lc), max(lc)))
+  }
+}
+
+# ── road surface material (categorical — top categories) ──────────────────────
+if ("road_surface_material" %in% names(output)) {
+  log_msg(sprintf("  %-28s  filled=%s", "road_surface_material",
+    fill_str(output$road_surface_material)))
+  surf <- output$road_surface_material[!is.na(output$road_surface_material)]
+  if (length(surf) > 0) {
+    tbl <- sort(table(surf), decreasing = TRUE)
+    top <- head(tbl, 6)
+    log_msg(sprintf("    top surfaces: %s",
+      paste(sprintf("%s=%d", names(top), as.integer(top)), collapse = "  |  ")))
+  }
+}
+
+# ── road width (continuous) ────────────────────────────────────────────────────
+if ("road_width_m" %in% names(output)) {
+  w <- output$road_width_m[!is.na(output$road_width_m)]
+  log_msg(sprintf("  %-28s  filled=%s", "road_width_m", fill_str(output$road_width_m)))
+  if (length(w) > 0) {
+    log_msg(sprintf("    min=%.1fm  median=%.1fm  mean=%.1fm  max=%.1fm",
+      min(w), median(w), mean(w), max(w)))
+  }
 }
 
 if (DEBUG) {
   log_msg("  [debug] Sample output rows (first 5):")
   sample_rows <- output |>
-    select(collision_index, acc_cols = any_of(c("first_road_number", "first_road_class")),
+    select(collision_index, any_of(c("first_road_class", "first_road_number")),
            any_of(new_cols)) |>
     head(5)
   for (i in seq_len(nrow(sample_rows))) {
-    log_msg("    ", paste(names(sample_rows), as.character(sample_rows[i, ]), sep = "=", collapse = "  "))
+    log_msg("    row ", i, ": ",
+      paste(names(sample_rows), as.character(sample_rows[i, ]), sep = "=", collapse = "  "))
   }
 }
 
