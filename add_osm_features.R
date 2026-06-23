@@ -5,8 +5,8 @@
 # real-time feature table.
 #
 # LIMITATION: OSM data is a current-era snapshot (downloaded at run time).
-# Accident years span 2020-2024, but road infrastructure tags (surface, lanes,
-# bridge, etc.) reflect the network as it exists today.  Treat as a proxy, not
+# Accident years span 2020-2024, but road infrastructure tags (lanes, bridge,
+# etc.) reflect the network as it exists today.  Treat as a proxy, not
 # a historically accurate record.
 #
 # Usage:
@@ -346,7 +346,7 @@ prepare_ways <- function(osm_obj) {
   if (!"osm_id" %in% names(ln)) ln$osm_id <- rownames(ln)
   ln <- select_existing(ln, c(
     "osm_id", "ref", "highway",
-    "lanes", "surface", "bridge", "tunnel", "width", "divider", "barrier"
+    "lanes", "bridge", "tunnel", "divider", "barrier"
   ))
   ln |> st_transform(BNG_CRS)
 }
@@ -427,10 +427,8 @@ if (DEBUG) {
       mutate(
         ref     = hstore_get(ot, "ref"),
         lanes   = hstore_get(ot, "lanes"),
-        surface = hstore_get(ot, "surface"),
         bridge  = hstore_get(ot, "bridge"),
         tunnel  = hstore_get(ot, "tunnel"),
-        width   = hstore_get(ot, "width"),
         divider = hstore_get(ot, "divider")
       )
     if ("other_tags" %in% names(road_ways)) road_ways$other_tags <- NULL
@@ -438,7 +436,7 @@ if (DEBUG) {
     road_ways <- road_ways_raw
   }
   road_ways <- select_existing(road_ways,
-    c("osm_id", "ref", "highway", "lanes", "surface", "bridge", "tunnel", "width", "divider"))
+    c("osm_id", "ref", "highway", "lanes", "bridge", "tunnel", "divider"))
 }
 
 # ── barrier_ways ──────────────────────────────────────────────────────────────
@@ -524,7 +522,7 @@ match_ways <- function(acc_sf, ways_sf, radius_m) {
 }
 
 # ── 8. Way-level features ──────────────────────────────────────────────────────
-step("8. Way-level features (lanes/surface/bridge/tunnel/width)")
+step("8. Way-level features (lanes/bridge/tunnel/divider)")
 log_msg(sprintf("  Matching %d accidents to road ways within %dm …",
   nrow(accidents_sf), WAY_RADIUS_M))
 
@@ -547,14 +545,9 @@ parse_lanes <- function(x) {
   suppressWarnings(as.integer(x))
 }
 
-parse_width <- function(x) {
-  x <- sub("\\s*m$", "", as.character(x), ignore.case = TRUE)  # "7.3 m" → "7.3"
-  suppressWarnings(as.numeric(x))
-}
-
 if (!is.null(road_ways)) {
   tag_cols <- intersect(
-    c("osm_id", "lanes", "surface", "bridge", "tunnel", "width", "divider"),
+    c("osm_id", "lanes", "bridge", "tunnel", "divider"),
     names(road_ways)
   )
   dbg("Way tag columns available: ", paste(tag_cols, collapse = ", "))
@@ -566,7 +559,7 @@ if (!is.null(road_ways)) {
     left_join(way_tags, by = "matched_osm_id")
 
   # Ensure every expected tag column exists (OSM may not return all tags)
-  for (.col in c("lanes", "surface", "bridge", "tunnel", "width", "divider")) {
+  for (.col in c("lanes", "bridge", "tunnel", "divider")) {
     if (!.col %in% names(way_raw)) {
       way_raw[[.col]] <- NA_character_
       dbg("  tag '", .col, "' absent from OSM download — filled with NA")
@@ -576,28 +569,24 @@ if (!is.null(road_ways)) {
   way_features <- way_raw |>
     transmute(
       .row_id,
-      lane_count            = parse_lanes(lanes),
-      road_surface_material = surface,
-      is_bridge             = as.integer(!is.na(bridge) & bridge != "no"),
-      is_tunnel             = as.integer(!is.na(tunnel) & tunnel != "no"),
-      road_width_m          = parse_width(width),
-      has_divider_tag       = !is.na(divider)
+      lane_count      = parse_lanes(lanes),
+      is_bridge       = as.integer(!is.na(bridge) & bridge != "no"),
+      is_tunnel       = as.integer(!is.na(tunnel) & tunnel != "no"),
+      has_divider_tag = !is.na(divider)
     )
 } else {
   log_msg("  No road ways downloaded — all way-level features will be NA")
   way_features <- tibble(
-    .row_id               = accidents_sf$.row_id,
-    lane_count            = NA_integer_,
-    road_surface_material = NA_character_,
-    is_bridge             = NA_integer_,
-    is_tunnel             = NA_integer_,
-    road_width_m          = NA_real_,
-    has_divider_tag       = FALSE
+    .row_id         = accidents_sf$.row_id,
+    lane_count      = NA_integer_,
+    is_bridge       = NA_integer_,
+    is_tunnel       = NA_integer_,
+    has_divider_tag = FALSE
   )
 }
 
 dbg("Way feature fill rates:")
-for (.c in c("lane_count", "road_surface_material", "is_bridge", "is_tunnel", "road_width_m")) {
+for (.c in c("lane_count", "is_bridge", "is_tunnel")) {
   pct <- 100 * mean(!is.na(way_features[[.c]]))
   dbg(sprintf("  %-25s %.1f%%", .c, pct))
 }
@@ -770,8 +759,8 @@ log_msg(sprintf("  Output table: %d rows × %d cols", nrow(output), ncol(output)
 # ── 15. Feature statistics ────────────────────────────────────────────────────
 new_cols <- c(
   "has_speed_camera", "dist_to_speed_camera_m", "lane_count",
-  "has_median", "has_traffic_calming", "road_surface_material",
-  "is_bridge", "is_tunnel", "road_width_m"
+  "has_median", "has_traffic_calming",
+  "is_bridge", "is_tunnel"
 )
 n <- nrow(output)
 
@@ -820,29 +809,6 @@ if ("lane_count" %in% names(output)) {
       paste(sprintf("%s lanes: %d", names(top), as.integer(top)), collapse = "  |  ")))
     log_msg(sprintf("    median=%.0f  mean=%.1f  range=[%d, %d]",
       median(lc), mean(lc), min(lc), max(lc)))
-  }
-}
-
-# ── road surface material (categorical — top categories) ──────────────────────
-if ("road_surface_material" %in% names(output)) {
-  log_msg(sprintf("  %-28s  filled=%s", "road_surface_material",
-    fill_str(output$road_surface_material)))
-  surf <- output$road_surface_material[!is.na(output$road_surface_material)]
-  if (length(surf) > 0) {
-    tbl <- sort(table(surf), decreasing = TRUE)
-    top <- head(tbl, 6)
-    log_msg(sprintf("    top surfaces: %s",
-      paste(sprintf("%s=%d", names(top), as.integer(top)), collapse = "  |  ")))
-  }
-}
-
-# ── road width (continuous) ────────────────────────────────────────────────────
-if ("road_width_m" %in% names(output)) {
-  w <- output$road_width_m[!is.na(output$road_width_m)]
-  log_msg(sprintf("  %-28s  filled=%s", "road_width_m", fill_str(output$road_width_m)))
-  if (length(w) > 0) {
-    log_msg(sprintf("    min=%.1fm  median=%.1fm  mean=%.1fm  max=%.1fm",
-      min(w), median(w), mean(w), max(w)))
   }
 }
 
