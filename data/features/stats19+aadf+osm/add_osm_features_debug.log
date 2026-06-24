@@ -1,0 +1,132 @@
+[2026-06-23 23:24:44] === DEBUG RUN (n=50) ===
+[2026-06-23 23:24:44] Output:    data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features_debug.csv
+[2026-06-23 23:24:44] Cache dir: data/raw/osm_cache/debug
+[2026-06-23 23:24:44] Log file:  data/features/stats19+aadf+osm/add_osm_features_debug.log
+[2026-06-23 23:24:44] ━━ 1. Load input ━━
+[2026-06-23 23:24:44]   Loaded 82491 rows × 41 cols from data/features/stats19+aadf/stats19+aadf_combined_realtime_features.csv
+[2026-06-23 23:24:44]   82481 rows have valid coordinates (10 missing)
+[2026-06-23 23:24:44]   [debug] 50 accidents clustered around median (-1.1518, 51.9143)
+[2026-06-23 23:24:44] [DBG] Sample collision_index values: 2020430303783, 2020430151670, 2021430336406, 2024430076459, 2021430041542
+[2026-06-23 23:24:44]   50 rows entering spatial pipeline
+[2026-06-23 23:24:44]   → done in 0.2s
+[2026-06-23 23:24:44] ━━ 2. Build road refs ━━
+[2026-06-23 23:24:44]   34/50 accidents have a matchable road ref (68%)
+[2026-06-23 23:24:44] [DBG] Sample acc_ref values (first 10):
+[2026-06-23 23:24:44] [DBG]   row 1: class=6 num=0 → ref=NA
+  row 2: class=3 num=4095 → ref=A4095
+  row 3: class=3 num=4095 → ref=A4095
+  row 4: class=4 num=4100 → ref=B4100
+  row 5: class=4 num=4100 → ref=B4100
+  row 6: class=3 num=4421 → ref=A4421
+  row 7: class=3 num=4421 → ref=A4421
+  row 8: class=6 num=0 → ref=NA
+  row 9: class=3 num=4095 → ref=A4095
+  row 10: class=3 num=4095 → ref=A4095
+[2026-06-23 23:24:44]   → done in 0.0s
+[2026-06-23 23:24:44] ━━ 3. Compute bounding box ━━
+[2026-06-23 23:24:45]   [debug] Bbox clamped to 15000m radius around centroid
+[2026-06-23 23:24:45]   lon [-1.3709, -0.9327]  lat [51.7792, 52.0495]
+[2026-06-23 23:24:45]   Approx bbox area: 1459 km²
+[2026-06-23 23:24:45]   → done in 0.0s
+[2026-06-23 23:24:45] ━━ 5. OSM downloads ━━
+[2026-06-23 23:24:45]   [cache hit] speed_cameras (data/raw/osm_cache/debug/speed_cameras.rds)
+[2026-06-23 23:24:45]   [cache hit] traffic_calming (data/raw/osm_cache/debug/traffic_calming.rds)
+[2026-06-23 23:24:45]   [Overpass] speed_displays — attempt 1/3 via https://overpass-api.de/api/interpreter …
+[2026-06-23 23:24:45]   [Overpass] speed_displays done in 0.9s — saved to data/raw/osm_cache/debug/speed_displays.rds
+[2026-06-23 23:24:45]   [Overpass] traffic_signals — attempt 1/3 via https://overpass-api.de/api/interpreter …
+[2026-06-23 23:24:47]   [Overpass] traffic_signals done in 1.2s — saved to data/raw/osm_cache/debug/traffic_signals.rds
+[2026-06-23 23:24:47]   [Overpass] road_ways — attempt 1/3 via https://overpass-api.de/api/interpreter …
+[2026-06-23 23:24:58]   [Overpass] road_ways failed on attempt 1 (11.3s): HTTP 504 Gateway Timeout.
+[2026-06-23 23:24:58]   [Overpass] waiting 15s before next attempt …
+[2026-06-23 23:25:13]   [Overpass] road_ways — attempt 2/3 via https://overpass.kumi.systems/api/interpreter …
+[2026-06-23 23:41:43]   [Overpass] road_ways failed on attempt 2 (990.2s): HTTP 429 Too Many Requests.
+[2026-06-23 23:41:43]   [Overpass] waiting 120s before next attempt …
+[2026-06-23 23:43:43]   [Overpass] road_ways — attempt 3/3 via https://maps.mail.ru/osm/tools/overpass/api/interpreter …
+[2026-06-23 23:43:49]   [Overpass] road_ways done in 4.9s — saved to data/raw/osm_cache/debug/road_ways.rds
+[2026-06-23 23:43:49]   [Overpass] barrier_ways — attempt 1/3 via https://overpass-api.de/api/interpreter …
+[2026-06-23 23:43:52]   [Overpass] barrier_ways done in 2.2s — saved to data/raw/osm_cache/debug/barrier_ways.rds
+[2026-06-23 23:43:52]   → done in 1147.3s
+[2026-06-23 23:43:52] ━━ 6. Prepare OSM sf objects ━━
+[2026-06-23 23:43:52]   OSM object counts:
+[2026-06-23 23:43:52]     road_ways                 19497
+[2026-06-23 23:43:52]     barrier_ways              4534
+[2026-06-23 23:43:52]     speed_cam_nodes           17
+[2026-06-23 23:43:52]     traffic_calm_nodes        401
+[2026-06-23 23:43:52]     speed_display_nodes       1
+[2026-06-23 23:43:52]     traffic_signal_nodes      197
+[2026-06-23 23:43:52]   1422/19497 road ways carry a ref tag (7%)
+[2026-06-23 23:43:52] [DBG] road_ways columns present: osm_id, ref, highway, lanes, bridge, tunnel, overtaking, shoulder, geometry, way_ref
+[2026-06-23 23:43:52] [DBG] Sample way refs: A44, A44, A44, A44, A44, A44, A44, A44, A44, A34
+[2026-06-23 23:43:52]   → done in 0.1s
+[2026-06-23 23:43:52] ━━ 8. Way-level features (lanes/bridge/tunnel/divider/overtaking/shoulder) ━━
+[2026-06-23 23:43:52]   Matching 50 accidents to road ways within 50m …
+[2026-06-23 23:43:52]   Way matches: 50 matched, 0 unmatched (100.0% coverage)
+[2026-06-23 23:43:52] [DBG] Matched way distance summary (metres):
+[2026-06-23 23:43:52] [DBG]   min=0.1  median=2.2  mean=3.8  max=48.6
+[2026-06-23 23:43:52] [DBG] Way tag columns available: osm_id, lanes, bridge, tunnel, overtaking, shoulder
+[2026-06-23 23:43:52] [DBG]   tag 'divider' absent from OSM download — filled with NA
+[2026-06-23 23:43:52] [DBG] Way feature fill rates:
+[2026-06-23 23:43:52] [DBG]   lane_count                70.0%
+[2026-06-23 23:43:52] [DBG]   is_bridge                 100.0%
+[2026-06-23 23:43:52] [DBG]   is_tunnel                 100.0%
+[2026-06-23 23:43:52] [DBG]   overtaking                0.0%
+[2026-06-23 23:43:52] [DBG]   shoulder                  26.0%
+[2026-06-23 23:43:52]   → done in 0.2s
+[2026-06-23 23:43:52] ━━ 9. Median / barrier check ━━
+[2026-06-23 23:43:52]   Checking 4534 barrier ways within 15m of each accident …
+[2026-06-23 23:43:52]   9 accidents have a nearby barrier way
+[2026-06-23 23:43:52]   has_median = 1 for 9/50 accidents (18.0%)
+[2026-06-23 23:43:52]   → done in 0.0s
+[2026-06-23 23:43:52] ━━ 12. Speed camera features ━━
+[2026-06-23 23:43:52]   11/17 nodes assigned a road ref via nearest way (within 100m)
+[2026-06-23 23:43:52]   7 candidate (accident, speed_camera) pairs within 500m
+[2026-06-23 23:43:52]   1/7 candidate pairs pass ref filter (86% use fallback)
+[2026-06-23 23:43:52]   7/50 accidents have at least one speed_camera within 500m
+[2026-06-23 23:43:52] [DBG] Speed camera distance summary (metres, among accidents with a camera):
+[2026-06-23 23:43:52] [DBG]   min=75.5  median=362.4  max=467.9
+[2026-06-23 23:43:52]   → done in 0.0s
+[2026-06-23 23:43:52] ━━ 13. Traffic calming features ━━
+[2026-06-23 23:43:52]   65/401 nodes assigned a road ref via nearest way (within 100m)
+[2026-06-23 23:43:52]   0 candidate (accident, traffic_calming) pairs within 50m
+[2026-06-23 23:43:52]   → done in 0.0s
+[2026-06-23 23:43:52] ━━ 14. Speed display sign features ━━
+[2026-06-23 23:43:52]   1/1 nodes assigned a road ref via nearest way (within 100m)
+[2026-06-23 23:43:52]   0 candidate (accident, speed_display) pairs within 500m
+[2026-06-23 23:43:52] [DBG] Speed display distance summary (metres, among accidents with a sign):
+[2026-06-23 23:43:52]   → done in 0.0s
+[2026-06-23 23:43:52] ━━ 15. Traffic signal features ━━
+[2026-06-23 23:43:52]   104/197 nodes assigned a road ref via nearest way (within 100m)
+[2026-06-23 23:43:52]   34 candidate (accident, traffic_signal) pairs within 50m
+[2026-06-23 23:43:52]   12/34 candidate pairs pass ref filter (65% use fallback)
+[2026-06-23 23:43:52]   13/50 accidents have at least one traffic_signal within 50m
+[2026-06-23 23:43:52]   → done in 0.0s
+[2026-06-23 23:43:52] ━━ 16. Assemble output ━━
+[2026-06-23 23:43:52]   Output table: 50 rows × 53 cols
+[2026-06-23 23:43:52]   ── OSM feature statistics (n = 50) ──
+[2026-06-23 23:43:52]   has_speed_camera              yes=7 (14.0%)  no=43 (86.0%)  NA=0
+[2026-06-23 23:43:52]   has_median                    yes=9 (18.0%)  no=41 (82.0%)  NA=0
+[2026-06-23 23:43:52]   has_traffic_calming           yes=0 (0.0%)  no=50 (100.0%)  NA=0
+[2026-06-23 23:43:52]   has_speed_display             yes=0 (0.0%)  no=50 (100.0%)  NA=0
+[2026-06-23 23:43:52]   has_traffic_signals           yes=13 (26.0%)  no=37 (74.0%)  NA=0
+[2026-06-23 23:43:52]   is_bridge                     yes=1 (2.0%)  no=49 (98.0%)  NA=0
+[2026-06-23 23:43:52]   is_tunnel                     yes=0 (0.0%)  no=50 (100.0%)  NA=0
+[2026-06-23 23:43:52]   dist_to_speed_camera_m        n=7  min=75m  median=362m  mean=278m  max=468m
+[2026-06-23 23:43:52]   dist_to_speed_display_m   no observations
+[2026-06-23 23:43:52]   lane_count                    filled=35 / 50 (70.0%)
+[2026-06-23 23:43:52]     distribution: 2 lanes: 20  |  3 lanes: 9  |  1 lanes: 5  |  4 lanes: 1
+[2026-06-23 23:43:52]     median=2  mean=2.2  range=[1, 4]
+[2026-06-23 23:43:52]   overtaking                    filled=0 / 50 (0.0%)
+[2026-06-23 23:43:52]   shoulder                      filled=13 / 50 (26.0%)
+[2026-06-23 23:43:52]     top values: no=13
+[2026-06-23 23:43:52]   [debug] Sample output rows (first 5):
+[2026-06-23 23:43:52]     row 1: collision_index=2020430303783  first_road_class=6  first_road_number=0  has_speed_camera=0  dist_to_speed_camera_m=NA  lane_count=NA  has_median=0  has_traffic_calming=0  has_speed_display=0  dist_to_speed_display_m=NA  has_traffic_signals=0  is_bridge=0  is_tunnel=0  overtaking=NA  shoulder=NA
+[2026-06-23 23:43:52]     row 2: collision_index=2020430151670  first_road_class=3  first_road_number=4095  has_speed_camera=0  dist_to_speed_camera_m=NA  lane_count=1  has_median=1  has_traffic_calming=0  has_speed_display=0  dist_to_speed_display_m=NA  has_traffic_signals=1  is_bridge=0  is_tunnel=0  overtaking=NA  shoulder=NA
+[2026-06-23 23:43:52]     row 3: collision_index=2021430336406  first_road_class=3  first_road_number=4095  has_speed_camera=0  dist_to_speed_camera_m=NA  lane_count=1  has_median=0  has_traffic_calming=0  has_speed_display=0  dist_to_speed_display_m=NA  has_traffic_signals=1  is_bridge=0  is_tunnel=0  overtaking=NA  shoulder=NA
+[2026-06-23 23:43:52]     row 4: collision_index=2024430076459  first_road_class=4  first_road_number=4100  has_speed_camera=0  dist_to_speed_camera_m=NA  lane_count=1  has_median=0  has_traffic_calming=0  has_speed_display=0  dist_to_speed_display_m=NA  has_traffic_signals=0  is_bridge=0  is_tunnel=0  overtaking=NA  shoulder=NA
+[2026-06-23 23:43:52]     row 5: collision_index=2021430041542  first_road_class=4  first_road_number=4100  has_speed_camera=0  dist_to_speed_camera_m=NA  lane_count=NA  has_median=0  has_traffic_calming=0  has_speed_display=0  dist_to_speed_display_m=NA  has_traffic_signals=0  is_bridge=0  is_tunnel=0  overtaking=NA  shoulder=NA
+[2026-06-23 23:43:52]   → done in 0.0s
+[2026-06-23 23:43:52] ━━ 18. Write output ━━
+[2026-06-23 23:43:52]   Written: data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features_debug.csv
+[2026-06-23 23:43:52]   Done. 50 rows × 53 columns.
+[2026-06-23 23:43:52]   [debug] Re-run without --debug for full dataset.
+[2026-06-23 23:43:52]   → done in 0.0s

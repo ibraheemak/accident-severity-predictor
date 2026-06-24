@@ -5,8 +5,8 @@
 # real-time feature table.
 #
 # LIMITATION: OSM data is a current-era snapshot (downloaded at run time).
-# Accident years span 2020-2024, but road infrastructure tags (lanes, bridge,
-# etc.) reflect the network as it exists today.  Treat as a proxy, not
+# Accident years span 2020-2024, but road infrastructure tags (lanes, etc.)
+# reflect the network as it exists today.  Treat as a proxy, not
 # a historically accurate record.
 #
 # Usage:
@@ -55,11 +55,12 @@ if (DEBUG) {
   LOG_FILE    <- file.path(OUTPUT_DIR, "add_osm_features.log")
 }
 
-SPEED_CAM_RADIUS_M    <- 500   # search radius for speed camera nodes
-TRAFFIC_CALM_RADIUS_M <-  50   # search radius for traffic calming nodes
-WAY_RADIUS_M          <-  50   # search radius for road way matching
-MEDIAN_BARRIER_RADIUS <-  15   # barrier=* way must be within this of accident
-POINT_WAY_RADIUS_M    <- 100   # max dist to assign a way's ref to a point node
+SPEED_CAM_RADIUS_M      <- 500   # search radius for speed camera nodes
+TRAFFIC_CALM_RADIUS_M   <-  50   # search radius for traffic calming nodes
+TRAFFIC_SIGNAL_RADIUS_M <-  50   # search radius for traffic signal nodes (junction-local, like calming)
+WAY_RADIUS_M            <-  50   # search radius for road way matching
+MEDIAN_BARRIER_RADIUS   <-  15   # barrier=* way must be within this of accident
+POINT_WAY_RADIUS_M      <- 100   # max dist to assign a way's ref to a point node
 
 BNG_CRS <- 27700  # British National Grid — metres, used for all distances
 
@@ -312,6 +313,12 @@ traffic_calm_osm <- fetch_or_cache("traffic_calming", function() {
     osmdata_sf()
 })
 
+traffic_signal_osm <- fetch_or_cache("traffic_signals", function() {
+  opq(bbox = bbox_wgs84, timeout = 300, memsize = OVERPASS_MEMSIZE) |>
+    add_osm_feature(key = "highway", value = "traffic_signals") |>
+    osmdata_sf()
+})
+
 # road_ways + barrier_ways strategy:
 #   Debug mode  — Overpass with the small clamped bbox (works fine, no timeouts).
 #   Full run    — osmextract/Geofabrik PBF (national scale exceeds Overpass limits).
@@ -346,7 +353,7 @@ prepare_ways <- function(osm_obj) {
   if (!"osm_id" %in% names(ln)) ln$osm_id <- rownames(ln)
   ln <- select_existing(ln, c(
     "osm_id", "ref", "highway",
-    "lanes", "bridge", "tunnel", "divider", "barrier"
+    "lanes", "divider", "barrier"
   ))
   ln |> st_transform(BNG_CRS)
 }
@@ -359,8 +366,9 @@ prepare_nodes <- function(osm_obj) {
   pt |> st_transform(BNG_CRS)
 }
 
-speed_cam_nodes    <- prepare_nodes(speed_cam_osm)
-traffic_calm_nodes <- prepare_nodes(traffic_calm_osm)
+speed_cam_nodes      <- prepare_nodes(speed_cam_osm)
+traffic_calm_nodes   <- prepare_nodes(traffic_calm_osm)
+traffic_signal_nodes <- prepare_nodes(traffic_signal_osm)
 
 # ── HSTORE parser for osmextract other_tags column ────────────────────────────
 # osmextract stores non-default tags in an OGR HSTORE field:
@@ -427,8 +435,6 @@ if (DEBUG) {
       mutate(
         ref     = hstore_get(ot, "ref"),
         lanes   = hstore_get(ot, "lanes"),
-        bridge  = hstore_get(ot, "bridge"),
-        tunnel  = hstore_get(ot, "tunnel"),
         divider = hstore_get(ot, "divider")
       )
     if ("other_tags" %in% names(road_ways)) road_ways$other_tags <- NULL
@@ -436,7 +442,7 @@ if (DEBUG) {
     road_ways <- road_ways_raw
   }
   road_ways <- select_existing(road_ways,
-    c("osm_id", "ref", "highway", "lanes", "bridge", "tunnel", "divider"))
+    c("osm_id", "ref", "highway", "lanes", "divider"))
 }
 
 # ── barrier_ways ──────────────────────────────────────────────────────────────
@@ -453,10 +459,11 @@ if (DEBUG) {
 
 log_msg("  OSM object counts:")
 for (item in list(
-  list("road_ways",          road_ways),
-  list("barrier_ways",       barrier_ways),
-  list("speed_cam_nodes",    speed_cam_nodes),
-  list("traffic_calm_nodes", traffic_calm_nodes)
+  list("road_ways",            road_ways),
+  list("barrier_ways",         barrier_ways),
+  list("speed_cam_nodes",      speed_cam_nodes),
+  list("traffic_calm_nodes",   traffic_calm_nodes),
+  list("traffic_signal_nodes", traffic_signal_nodes)
 )) {
   n <- if (is.null(item[[2]])) 0L else nrow(item[[2]])
   log_msg(sprintf("    %-25s %d", item[[1]], n))
@@ -522,7 +529,7 @@ match_ways <- function(acc_sf, ways_sf, radius_m) {
 }
 
 # ── 8. Way-level features ──────────────────────────────────────────────────────
-step("8. Way-level features (lanes/bridge/tunnel/divider)")
+step("8. Way-level features (lanes/divider)")
 log_msg(sprintf("  Matching %d accidents to road ways within %dm …",
   nrow(accidents_sf), WAY_RADIUS_M))
 
@@ -547,7 +554,7 @@ parse_lanes <- function(x) {
 
 if (!is.null(road_ways)) {
   tag_cols <- intersect(
-    c("osm_id", "lanes", "bridge", "tunnel", "divider"),
+    c("osm_id", "lanes", "divider"),
     names(road_ways)
   )
   dbg("Way tag columns available: ", paste(tag_cols, collapse = ", "))
@@ -559,7 +566,7 @@ if (!is.null(road_ways)) {
     left_join(way_tags, by = "matched_osm_id")
 
   # Ensure every expected tag column exists (OSM may not return all tags)
-  for (.col in c("lanes", "bridge", "tunnel", "divider")) {
+  for (.col in c("lanes", "divider")) {
     if (!.col %in% names(way_raw)) {
       way_raw[[.col]] <- NA_character_
       dbg("  tag '", .col, "' absent from OSM download — filled with NA")
@@ -570,8 +577,6 @@ if (!is.null(road_ways)) {
     transmute(
       .row_id,
       lane_count      = parse_lanes(lanes),
-      is_bridge       = as.integer(!is.na(bridge) & bridge != "no"),
-      is_tunnel       = as.integer(!is.na(tunnel) & tunnel != "no"),
       has_divider_tag = !is.na(divider)
     )
 } else {
@@ -579,14 +584,12 @@ if (!is.null(road_ways)) {
   way_features <- tibble(
     .row_id         = accidents_sf$.row_id,
     lane_count      = NA_integer_,
-    is_bridge       = NA_integer_,
-    is_tunnel       = NA_integer_,
     has_divider_tag = FALSE
   )
 }
 
 dbg("Way feature fill rates:")
-for (.c in c("lane_count", "is_bridge", "is_tunnel")) {
+for (.c in c("lane_count")) {
   pct <- 100 * mean(!is.na(way_features[[.c]]))
   dbg(sprintf("  %-25s %.1f%%", .c, pct))
 }
@@ -739,15 +742,27 @@ tc_features <- tc_result |>
     has_traffic_calming = has_feature
   )
 
-# ── 14. Assemble all OSM features ─────────────────────────────────────────────
-step("14. Assemble output")
+# ── 14. Traffic signal features ────────────────────────────────────────────────
+step("14. Traffic signal features")
+traffic_signal_nodes <- assign_point_road_ref(traffic_signal_nodes, road_ways, POINT_WAY_RADIUS_M)
+signal_result         <- match_points(accidents_sf, traffic_signal_nodes, TRAFFIC_SIGNAL_RADIUS_M,
+                                      label = "traffic_signal")
+signal_features <- signal_result |>
+  transmute(
+    .row_id,
+    has_traffic_signals = has_feature
+  )
+
+# ── 15. Assemble all OSM features ─────────────────────────────────────────────
+step("15. Assemble output")
 
 osm_features <- accidents_sf |>
   st_drop_geometry() |>
   select(.row_id) |>
-  left_join(cam_features,  by = ".row_id") |>
-  left_join(tc_features,   by = ".row_id") |>
-  left_join(way_features,  by = ".row_id")
+  left_join(cam_features,    by = ".row_id") |>
+  left_join(tc_features,     by = ".row_id") |>
+  left_join(signal_features, by = ".row_id") |>
+  left_join(way_features,    by = ".row_id")
 
 # For rows with no valid coordinates, all OSM columns will be NA (left join fills NA)
 output <- accidents |>
@@ -756,11 +771,10 @@ output <- accidents |>
 
 log_msg(sprintf("  Output table: %d rows × %d cols", nrow(output), ncol(output)))
 
-# ── 15. Feature statistics ────────────────────────────────────────────────────
+# ── 16. Feature statistics ────────────────────────────────────────────────────
 new_cols <- c(
   "has_speed_camera", "dist_to_speed_camera_m", "lane_count",
-  "has_median", "has_traffic_calming",
-  "is_bridge", "is_tunnel"
+  "has_median", "has_traffic_calming", "has_traffic_signals"
 )
 n <- nrow(output)
 
@@ -774,7 +788,7 @@ fill_str <- function(x) {
 
 # ── binary features ────────────────────────────────────────────────────────────
 for (col in c("has_speed_camera", "has_median", "has_traffic_calming",
-              "is_bridge", "is_tunnel")) {
+              "has_traffic_signals")) {
   if (!col %in% names(output)) next
   x   <- output[[col]]
   yes <- sum(x == 1L, na.rm = TRUE)
@@ -824,8 +838,8 @@ if (DEBUG) {
   }
 }
 
-# ── 16. Write output ───────────────────────────────────────────────────────────
-step("16. Write output")
+# ── 17. Write output ───────────────────────────────────────────────────────────
+step("17. Write output")
 write_csv(output, OUTPUT_FILE)
 log_msg(sprintf("  Written: %s", OUTPUT_FILE))
 log_msg(sprintf("  Done. %d rows × %d columns.", nrow(output), ncol(output)))

@@ -234,7 +234,109 @@ counts, distances) is written to `join_aadf.log` at `[DEBUG]` level.
 
 ---
 
-## 7. Next steps (not yet done)
+## 7. OpenStreetMap Road Infrastructure Features — `add_osm_features.R`
+
+Enriches every accident with road-network features pulled from OpenStreetMap
+(OSM): speed cameras, traffic calming, traffic signals, lane count, and
+median presence.
+
+### LIMITATION
+OSM data is a **current-era snapshot** (downloaded at run time), while
+accident years span 2020–2024. Road infrastructure tags (lanes, signals,
+etc.) reflect the network as it exists today, not as it was at the time of
+each accident. Treat these features as a proxy, not a historically accurate
+record.
+
+### Data sources
+- **Road ways + barriers** (national scale): a Great Britain PBF extract from
+  [Geofabrik](https://download.geofabrik.de/europe/great-britain-latest.osm.pbf),
+  read via the `osmextract` package. Geofabrik does not publish a
+  separate England-only extract, so both debug and full runs that touch
+  osmextract use the GB-wide file. The PBF (~2 GB) and its converted
+  GeoPackage are cached in `data/raw/osm_cache/` after the first run.
+- **Point features** (speed cameras, traffic calming, traffic signals):
+  queried live from the Overpass API (3 mirror servers, rotated on retry)
+  using the bounding box of the accidents being processed.
+
+### Why two different sources
+Overpass times out / OOMs on national-scale way queries (e.g. all driveable
+roads, or all `barrier=*` ways, across Great Britain), so those go through
+the offline PBF extract instead. Point features are sparse enough nationally
+that Overpass handles them directly. In `--debug` mode, the bounding box is
+small (50 accidents clustered around the dataset median, clamped to a 15 km
+radius), so road ways and barriers are also fetched via Overpass — osmextract
+is skipped entirely in debug mode.
+
+### Road matching algorithm (two-stage, ref-first then nearest)
+Each accident's `first_road_class` + `first_road_number` (STATS19 codes) is
+converted into an OSM-style ref (e.g. class `2`/`3` + number `461` → `"A461"`).
+For each accident:
+1. **Stage 1 (ref match)** — among road ways within the search radius, keep
+   only those whose OSM `ref` tag matches the accident's constructed ref
+   (handles semicolon-separated refs like `"A1;A2"`); pick the nearest.
+2. **Stage 2 (fallback)** — if no ref match (or the accident has no
+   constructed ref), fall back to the nearest way within radius regardless
+   of ref.
+
+Speed cameras and traffic signals rarely carry a `ref` tag themselves, so
+each point is first assigned the `ref` of its nearest road way (within
+100 m) before the same two-stage matching is applied to points.
+
+### Tag extraction (osmextract `other_tags` HSTORE)
+For the osmextract path, `extra_tags` is intentionally **not** used — passing
+non-default tags to `oe_read()` was found to corrupt GDAL's vectortranslate
+step (`osmconf.ini` modification issue) in this environment. Instead, only
+default columns are pulled (including the `other_tags` HSTORE field), and
+`ref`, `lanes`, `divider` are parsed out of `other_tags` in R via a small
+regex-based HSTORE parser.
+
+### New columns added
+
+| Column | Type | Description |
+|--------|------|--------------|
+| `has_speed_camera` | 0/1 | Speed camera within 500 m |
+| `dist_to_speed_camera_m` | double | Distance to the matched camera (NA if none) |
+| `has_traffic_calming` | 0/1 | Traffic calming feature within 50 m |
+| `has_traffic_signals` | 0/1 | Traffic signal node within 50 m |
+| `lane_count` | integer | Lane count of the matched road way (NA if untagged) |
+| `has_median` | 0/1 | Matched way has a `divider` tag, or a `barrier=*` way passes within 15 m |
+
+Columns considered and **dropped** after generation, due to near-total
+sparsity in OSM Great Britain coverage: `road_width_m`, `road_surface_material`,
+`overtaking`, `shoulder`. `is_bridge`/`is_tunnel` and a speed-display-sign
+feature were also tried and dropped — bridges/tunnels are rare events that
+added little signal, and OSM's `highway=speed_display` tag is used on only a
+few hundred nodes nationally.
+
+### Output: `data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv`
+82,491 rows × 47 columns (the AADF-joined table plus the 6 columns above).
+Run matching achieved 100% coverage (every accident with valid coordinates
+matched to a road way within 50 m).
+
+### Debug mode
+`Rscript add_osm_features.R --debug` processes 50 accidents clustered around
+the dataset's median coordinate, with verbose `[DBG]` logging, writing to
+`stats19+aadf+osm_combined_realtime_features_debug.csv` and a separate debug
+log/cache directory.
+
+### Logging
+Every run writes to `data/features/stats19+aadf+osm/add_osm_features.log`
+(or `..._debug.log`), including per-column fill-rate statistics, match-rate
+percentages at each stage, and distance distributions for matched cameras.
+
+### Completeness check — `check_feature_completeness.R`
+A companion script reports how many rows have **zero genuinely missing**
+values across the full combined table. Some NAs are structurally valid
+rather than missing data (e.g. `dist_to_speed_camera_m` is NA because there
+is no camera nearby; `second_road_class`/`junction_control` are NA because
+the accident wasn't at a junction) — these are excused from the count. As of
+the current feature set, 40,565/82,491 rows (49.2%) have no unexcused
+missing values; `lane_count` (43.9% missing — untagged in OSM) is the
+largest remaining gap.
+
+---
+
+## 8. Next steps (not yet done)
 
 - Decide treatment for `light_conditions` / `weather_conditions` (replace with
   external API at inference; for training, decide whether to keep STATS19

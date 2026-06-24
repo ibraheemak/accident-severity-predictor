@@ -3,8 +3,8 @@
 #
 # Reports how many rows in the combined feature table have zero "true"
 # missing values. Some NAs are structurally valid rather than missing data:
-#   - dist_to_speed_camera_m is NA because there is no camera nearby
-#     (has_speed_camera == 0)
+#   - dist_to_speed_camera_m / dist_to_speed_display_m are NA because there
+#     is no camera / sign nearby (has_speed_camera / has_speed_display == 0)
 #   - second_road_class / second_road_number / junction_control are NA
 #     because the accident wasn't recorded at a junction
 #     (junction_detail == 0, "Not at junction or within 20 metres")
@@ -23,10 +23,11 @@ df <- read_csv(INPUT_FILE, show_col_types = FALSE)
 # column -> condition (quoted expr, evaluated against df) under which an NA
 # in that column is structurally valid and excused from the missing count.
 excused <- list(
-  dist_to_speed_camera_m = quote(has_speed_camera == 0),
-  second_road_class      = quote(junction_detail == 0),
-  second_road_number     = quote(junction_detail == 0),
-  junction_control       = quote(junction_detail == 0)
+  dist_to_speed_camera_m  = quote(has_speed_camera == 0),
+  dist_to_speed_display_m = quote(has_speed_display == 0),
+  second_road_class       = quote(junction_detail == 0),
+  second_road_number      = quote(junction_detail == 0),
+  junction_control        = quote(junction_detail == 0)
 )
 
 feature_cols <- names(df)
