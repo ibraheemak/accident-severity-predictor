@@ -13,6 +13,13 @@
 #
 # Note: step 6 (add_osm_features.R) downloads a ~2 GB Great Britain OSM PBF
 # extract on first run and can take several minutes even with a warm cache.
+#
+# Note: step 7 (add_openmeteo_features.R) calls the Open-Meteo Historical
+# Weather API once per distinct accident date. Without a paid-plan API key
+# (OPENMETEO_API_KEY / OPENMETEO_BASE_URL in a gitignored .Renviron at the
+# project root), it uses the free anonymous endpoint, which is shared by IP
+# and rate-limited — a full run can take well over an hour and may stall on
+# 429s. See docs/data_pipeline.md section 8 for details.
 START_FROM <- 2
 # ──────────────────────────────────────────────────────────────────────────────
 

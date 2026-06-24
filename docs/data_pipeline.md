@@ -336,11 +336,124 @@ largest remaining gap.
 
 ---
 
-## 8. Next steps (not yet done)
+## 8. Open-Meteo Historical Weather Features — `add_openmeteo_features.R`
 
-- Decide treatment for `light_conditions` / `weather_conditions` (replace with
-  external API at inference; for training, decide whether to keep STATS19
-  values or also source historical weather externally for consistency).
+Enriches every accident with objective, continuous weather measurements at
+its exact lat/lon and hour, sourced from Open-Meteo's Historical Weather API
+(ERA5/ERA5-Land reanalysis, hourly, back to 1940). This is a deliberate
+upgrade over STATS19's `weather_conditions` column, which is a subjective
+category assessed by the attending officer at the scene rather than a
+measurement.
+
+### Source
+[open-meteo.com/en/docs/historical-weather-api](https://open-meteo.com/en/docs/historical-weather-api)
+
+### Batching strategy
+Open-Meteo's archive endpoint accepts a comma-separated list of locations in
+a single request and returns the full day's hourly series for each one. The
+script groups accidents by **date** (not by location — exact coordinate
+collisions between two different accidents are effectively impossible), then
+splits each date's accidents into batches of `MAX_BATCH_SIZE` (100, chosen
+conservatively — empirically, GET requests for 200 locations still succeeded
+but 500+ hit `414 Request-URI Too Large`, since this is a query-string length
+limit rather than a documented per-request location cap). One API call is
+made per (date, batch); the correct hour's values are then picked out of that
+batch's 24-hour response for each accident.
+
+This collapses what would be ~82,000 row-level calls down to roughly one
+call per distinct accident date (~1,800 for the 2020–2024 sample).
+
+### Caching
+Each (date, batch) response is cached to `data/raw/openmeteo_cache/*.rds`,
+keyed as `<date>_b<batch_index>.rds`. A single full run never re-issues the
+same key, so the cache's value is purely for **resuming** an interrupted run
+(crash, rate limit, network failure) without re-fetching dates already
+fetched — not for deduplicating within one run.
+
+### Rate limiting
+The free, anonymous endpoint (`archive-api.open-meteo.com`) is shared by IP
+and capped at 600 calls/min, 5,000/hour, 10,000/day. The script self-throttles
+to roughly one request every `MIN_REQUEST_INTERVAL_SEC` (2s) to avoid tripping
+this, and on a `429` response retries the same batch with escalating backoff
+(60s → 180s → 300s) before falling back to a circuit breaker that cools down
+for `CIRCUIT_BREAKER_COOLDOWN` (10 min) and retries indefinitely (up to
+`MAX_COOLDOWN_CYCLES`, ~3.3 hours) rather than giving up and writing NA — a
+429 is a transient throttle, not a real data error.
+
+For reliable, fast runs, a paid Open-Meteo plan removes this entirely. Set
+`OPENMETEO_API_KEY` and `OPENMETEO_BASE_URL` in a **gitignored** `.Renviron`
+file at the project root (R loads this automatically on startup — never
+commit credentials into a tracked file). One subtlety: the dedicated
+customer endpoint is **API-specific**, not a single generic domain — the
+Historical Weather/Archive API's customer endpoint is
+`customer-archive-api.open-meteo.com`, not the generic
+`customer-api.open-meteo.com` shown in the top-level docs example (that
+generic form 404s for the archive API; each Open-Meteo API has its own
+`customer-<api-name>-api` subdomain).
+
+```
+# .Renviron (gitignored, not committed)
+OPENMETEO_API_KEY=your-key-here
+OPENMETEO_BASE_URL=https://customer-archive-api.open-meteo.com/v1/archive
+```
+
+### Hourly variables requested
+`temperature_2m`, `precipitation`, `wind_speed_10m`, `weather_code`,
+`snowfall`, `snow_depth`. **Visibility was requested and dropped**: the
+archive endpoint's ERA5 reanalysis does not model it and returns `null` for
+every hour regardless of location or date (verified directly against the
+API) — there is no objective visibility source available from this provider
+for historical dates.
+
+### New columns added
+
+| Column | Type | Description |
+|--------|------|--------------|
+| `temperature_2m_c` | double | Air temperature at 2m, °C |
+| `precipitation_mm` | double | Precipitation, mm/hour |
+| `wind_speed_10m_kmh` | double | Wind speed at 10m, km/h |
+| `weather_code` | integer | WMO weather code for the hour |
+| `snowfall_cm` | double | Snowfall, cm |
+| `snow_depth_m` | double | Snow depth, m |
+
+### Output: `data/features/stats19+aadf+osm+meteo/stats19+aadf+osm+meteo_combined_realtime_features.csv`
+82,481 rows × 53 columns. 10 rows from the upstream table had no valid
+lat/lon (and therefore no possible weather lookup) and were removed by the
+companion script below rather than kept as all-NA.
+
+### Debug mode
+`Rscript add_openmeteo_features.R --debug` processes the first 50 rows,
+writing to `..._debug.csv` and a separate debug log/cache directory.
+
+### Companion: `drop_invalid_meteo_rows.R`
+Removes the 10 accidents with no valid lat/lon/date/time from the output
+table (`temperature_2m_c` is NA for exactly these rows — there was never any
+weather to look up). Run once after `add_openmeteo_features.R`:
+```
+Rscript drop_invalid_meteo_rows.R
+```
+
+### Companion: `analyze_meteo_features.R`
+Reports the distribution of every weather column: missing rate, quantiles
+(Q1/median/Q3/P90/P99), mean/sd, zero-rate, a text histogram, a labelled WMO
+`weather_code` frequency table, and pairwise correlations between the
+continuous variables. Findings from the current sample: precipitation
+(76.8%), snowfall (99.5%), and snow depth (97.9%) are heavily zero-inflated;
+`weather_code` is dominated by Overcast (38.7%) and Clear sky (17.4%); only
+2.7% of accidents occurred during measurable rain/snow; pairwise correlations
+among the continuous features are all weak (|r| ≤ 0.16), i.e. little
+redundancy between them.
+```
+Rscript analyze_meteo_features.R
+```
+
+---
+
+## 9. Next steps (not yet done)
+
+- Decide treatment for `light_conditions` (replace with an external API at
+  inference, or keep the STATS19 value) — `weather_conditions` is now
+  superseded by the Open-Meteo features above.
 - Encode categorical/code columns as needed for the chosen model.
 - Casualty-derived features (if any) — not yet built; `casualties` codes/labels
   CSVs are available but unused so far.
