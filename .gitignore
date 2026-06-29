@@ -1,4 +1,5 @@
 data/raw/aadf/dft_traffic_counts_aadf.csv
 data/raw/osm_cache/
+data/splits/*_masked.csv
 .claude/
 .Renviron
