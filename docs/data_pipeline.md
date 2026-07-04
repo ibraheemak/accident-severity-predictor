@@ -484,7 +484,111 @@ every year (2020–2024); full breakdown in `data/splits/split_stats.txt`
 
 ---
 
-## 10. Masked-Copy Generation for Partial-Observability Training — `generate_masked_splits.R`
+## 10. Feature Normalization — `normalize_splits.R`
+
+Transforms every non-binary, non-metadata model feature before the data is
+handed to the masked-copy generator. All statistics are computed from the
+**train split only** and applied identically to valid and test — no leakage.
+
+Three transformations are applied in order:
+
+---
+
+### Step 1 — Cyclic encoding
+
+`day_of_week` (1–7) and the hour extracted from `time` (0–23) are periodic:
+day 7 and day 1 are adjacent, hour 23 and hour 0 are adjacent. A linear scale
+or z-score breaks that adjacency, so both are replaced by a sin/cos pair:
+
+| Raw column   | Period | Replacement columns                     |
+|---|---|---|
+| `day_of_week` | 7 | `day_of_week_sin`, `day_of_week_cos` |
+| `time` (HH:MM:SS) | 24 h | `hour_sin`, `hour_cos` |
+
+Formula (0-based so first value maps to angle 0):
+
+```
+day_of_week_sin = sin(2π × (day_of_week − 1) / 7)
+day_of_week_cos = cos(2π × (day_of_week − 1) / 7)
+hour            = integer part of time string
+hour_sin        = sin(2π × hour / 24)
+hour_cos        = cos(2π × hour / 24)
+```
+
+The original `day_of_week` and `time` columns are dropped from the output.
+
+---
+
+### Step 2 — log1p for right-skewed columns
+
+Before z-scoring, `log1p(x)` is applied to every column in `ZSCORE_COLS`
+where the **train** skewness > 2 **and** train minimum ≥ 0. This compresses
+the heavy right tail so the z-score is not dominated by rare extreme values.
+
+10 columns met the threshold:
+
+| Column | Skewness |
+|---|---|
+| `aadf_distance_m` | 46.8 |
+| `snowfall_cm` | 34.9 |
+| `snow_depth_m` | 26.9 |
+| `precipitation_mm` | 8.7 |
+| `pedestrian_crossing` | 5.0 |
+| `junction_detail` | 4.6 |
+| `second_road_number` | 3.8 |
+| `weather_conditions` | 3.2 |
+| `aadf_traffic_volume` | 3.1 |
+| `first_road_number` | 2.3 |
+
+The threshold is computed at runtime from the actual train distribution, so
+it self-updates if the input data changes.
+
+---
+
+### Step 3 — Z-score standardization
+
+All 23 columns in `ZSCORE_COLS` (post log1p where applicable) are
+standardized to mean 0 / SD 1 using train statistics:
+
+```
+x_norm = (x − mean_train) / sd_train
+```
+
+Columns normalized (binary flags, metadata, target, and the two cyclic
+columns handled above are excluded):
+
+`number_of_vehicles`, `first_road_class`, `first_road_number`, `road_type`,
+`speed_limit`, `junction_detail`, `junction_control`, `second_road_class`,
+`second_road_number`, `pedestrian_crossing`, `urban_or_rural_area`,
+`light_conditions`, `weather_conditions`, `aadf_traffic_volume`,
+`aadf_distance_m`, `dist_to_speed_camera_m`, `lane_count`,
+`temperature_2m_c`, `precipitation_mm`, `wind_speed_10m_kmh`, `weather_code`,
+`snowfall_cm`, `snow_depth_m`.
+
+A zero-SD guard fires a hard error if any column is constant on train —
+such a column carries no information and should be removed, not silently
+left as NaN.
+
+---
+
+### Output: `data/splits/normalized/`
+
+| File | Description |
+|---|---|
+| `train_norm.csv` | Normalized training split (57,732 rows) |
+| `valid_norm.csv` | Normalized validation split (12,367 rows) |
+| `test_norm.csv` | Normalized test split (12,382 rows) |
+| `normalization_stats.csv` | Per-column mean, SD, and `log1p_first` flag — apply these to any new data at inference time |
+
+> **Columns not normalized** (passed through unchanged):  
+> metadata (`collision_index`, `collision_year`, `longitude`, `latitude`,
+> `date`, `data_year`), target (`collision_severity`), binary flags
+> (`has_*`, `has_speed_camera`, `has_traffic_calming`, `has_traffic_signals`,
+> `has_median`, `trunk_road_flag`), and the string column `aadf_match_type`.
+
+---
+
+## 11. Masked-Copy Generation for Partial-Observability Training — `generate_masked_splits.R`
 
 The model needs to perform well when only some STATS19 fields have been
 acquired at inference time (a "999 call" scenario where the responder
@@ -492,10 +596,15 @@ doesn't yet know e.g. `junction_detail` or `second_road_class`). To train
 for this, every row in each split is expanded into multiple copies with
 varying amounts of feature masking.
 
+Reads from `data/splits/normalized/` (output of step 10); masking is applied
+to already-normalized values so masked-out NAs carry no unnormalized scale.
+
 ### Column categories
-- **`XBASE_COLS`** (9, never masked — always available at call time):
+- **`XBASE_COLS`** (10, never masked — always available at call time):
   `collision_index`, `collision_year`, `longitude`, `latitude`, `date`,
-  `data_year`, `collision_severity`, `day_of_week`, `time`.
+  `data_year`, `collision_severity`, `day_of_week_sin`, `day_of_week_cos`,
+  `hour_sin`, `hour_cos` (the raw `day_of_week` and `time` columns were
+  replaced by their cyclic encodings in step 10).
 - **`ACQUIRABLE_COLS`** (28, candidates for masking): `number_of_vehicles`,
   `first_road_class`, `first_road_number`, `road_type`, `speed_limit`,
   `junction_detail`, `junction_control`, `second_road_class`,
@@ -519,7 +628,7 @@ varying amounts of feature masking.
 Each original row therefore becomes 11 rows (1 unmasked + 10 masked), all
 columns preserved, seed 42 for reproducibility.
 
-### Output: `data/splits/{train,valid,test}_masked.csv`
+### Output: `data/splits/masked/{train,valid,test}_masked.csv`
 | Split | Original rows | Expanded rows |
 |---|---|---|
 | train | 57,732 | 635,052 |
@@ -533,7 +642,7 @@ section 3) — if a deliberately-masked field happened to already be NA, it
 doesn't change the row's actual NA count beyond what `mask_rate` records as
 intentional.
 
-### Companion stats: `data/splits/mask_stats/`
+### Companion stats: `data/splits/masked/mask_stats/`
 Computed directly from the same mask matrix used to generate the files
 (not by re-inspecting NAs in the output, which would be confounded by the
 pre-existing NAs above):
@@ -550,11 +659,10 @@ pre-existing NAs above):
 
 ---
 
-## 11. Next steps (not yet done)
+## 12. Next steps (not yet done)
 
 - Decide treatment for `light_conditions` (replace with an external API at
   inference, or keep the STATS19 value) — `weather_conditions` is now
   superseded by the Open-Meteo features above.
-- Encode categorical/code columns as needed for the chosen model.
 - Casualty-derived features (if any) — not yet built; `casualties` codes/labels
   CSVs are available but unused so far.

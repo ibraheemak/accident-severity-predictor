@@ -1,6 +1,10 @@
 #!/usr/bin/env Rscript
 # generate_masked_splits.R
 #
+# Run normalize_splits.R first -- this script masks the already-normalized
+# *_norm.csv splits, not the raw splits, so masked-out values don't carry
+# unnormalized scale into the training data.
+#
 # For each split (train/valid/test), expands every row into:
 #   - 1 unmasked copy   (copy_id = -1, mask_rate = 0.0)
 #   - 10 masked copies  (copy_id = 0..9)
@@ -15,14 +19,18 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
-SEED <- 42
+SEED      <- 42
 SPLIT_DIR <- "data/splits"
-SPLITS <- c("train", "valid", "test")
+NORM_DIR  <- file.path(SPLIT_DIR, "normalized")
+MASK_DIR  <- file.path(SPLIT_DIR, "masked")
+SPLITS    <- c("train", "valid", "test")
 
 # Always available at call time -- never masked.
+# day_of_week and time are replaced by their cyclic encodings from normalize_splits.R.
 XBASE_COLS <- c(
   "collision_index", "collision_year", "longitude", "latitude", "date",
-  "data_year", "collision_severity", "day_of_week", "time"
+  "data_year", "collision_severity",
+  "day_of_week_sin", "day_of_week_cos", "hour_sin", "hour_cos"
 )
 
 # STATS19 fields that may or may not be acquired -- candidates for masking.
@@ -99,15 +107,16 @@ feature_mask_frequency <- function(mask_mat) {
 
 set.seed(SEED)
 
-stats_dir <- file.path(SPLIT_DIR, "mask_stats")
+dir.create(MASK_DIR, showWarnings = FALSE, recursive = TRUE)
+stats_dir <- file.path(MASK_DIR, "mask_stats")
 dir.create(stats_dir, showWarnings = FALSE, recursive = TRUE)
 
 all_mask_counts <- list()
 all_mask_mats <- list()
 
 for (split in SPLITS) {
-  in_path <- file.path(SPLIT_DIR, paste0(split, ".csv"))
-  out_path <- file.path(SPLIT_DIR, paste0(split, "_masked.csv"))
+  in_path <- file.path(NORM_DIR, paste0(split, "_norm.csv"))
+  out_path <- file.path(MASK_DIR, paste0(split, "_masked.csv"))
 
   df <- read_csv(in_path, show_col_types = FALSE)
   stopifnot(all(c(XBASE_COLS, ACQUIRABLE_COLS) %in% names(df)))
@@ -146,4 +155,5 @@ write_csv(
   file.path(stats_dir, "combined_feature_mask_frequency.csv")
 )
 
-cat(sprintf("\nMask statistics written to %s/\n", stats_dir))
+cat(sprintf("\nMasked splits written to %s/\n", MASK_DIR))
+cat(sprintf("Mask statistics written to %s/\n", stats_dir))

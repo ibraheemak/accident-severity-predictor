@@ -1,5 +1,9 @@
 data/raw/aadf/dft_traffic_counts_aadf.csv
 data/raw/osm_cache/
 data/splits/*_masked.csv
+data/splits/masked/*_masked.csv
+data/splits/normalized/train_norm.csv
+data/splits/normalized/valid_norm.csv
+data/splits/normalized/test_norm.csv
 .claude/
 .Renviron

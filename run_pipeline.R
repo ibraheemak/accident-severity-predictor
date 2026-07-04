@@ -1,12 +1,15 @@
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # Which step to start the pipeline from:
-#   1 = download & sample STATS19 data              (stats19_download.R)
-#   2 = build collision realtime features            (build_realtime_collision_features.R)
-#   3 = build vehicle realtime features              (build_realtime_vehicle_features.R)
-#   4 = build combined feature table                 (build_combined_features.R)
-#   5 = join AADF traffic volume onto combined table (join_aadf.R)
-#   6 = join OpenStreetMap road infrastructure features (add_osm_features.R)
-#   7 = join Open-Meteo historical weather features     (add_openmeteo_features.R)
+#   1  = download & sample STATS19 data                  (stats19_download.R)
+#   2  = build collision realtime features                (build_realtime_collision_features.R)
+#   3  = build vehicle realtime features                  (build_realtime_vehicle_features.R)
+#   4  = build combined feature table                     (build_combined_features.R)
+#   5  = join AADF traffic volume onto combined table     (join_aadf.R)
+#   6  = join OpenStreetMap road infrastructure features  (add_osm_features.R)
+#   7  = join Open-Meteo historical weather features      (add_openmeteo_features.R)
+#   8  = stratified train/valid/test split                (split_train_valid_test.R)
+#   9  = feature normalization                            (normalize_splits.R)
+#   10 = masked-copy generation                           (generate_masked_splits.R)
 #
 # All later steps are run too. If START_FROM > 1, the pipeline uses the most
 # recent data/raw/stats19_* download as input.
@@ -24,13 +27,16 @@ START_FROM <- 2
 # ──────────────────────────────────────────────────────────────────────────────
 
 steps <- list(
-  "1" = "stats19_download.R",
-  "2" = "build_realtime_collision_features.R",
-  "3" = "build_realtime_vehicle_features.R",
-  "4" = "build_combined_features.R",
-  "5" = "join_aadf.R",
-  "6" = "add_osm_features.R",
-  "7" = "add_openmeteo_features.R"
+  "1"  = "stats19_download.R",
+  "2"  = "build_realtime_collision_features.R",
+  "3"  = "build_realtime_vehicle_features.R",
+  "4"  = "build_combined_features.R",
+  "5"  = "join_aadf.R",
+  "6"  = "add_osm_features.R",
+  "7"  = "add_openmeteo_features.R",
+  "8"  = "split_train_valid_test.R",
+  "9"  = "normalize_splits.R",
+  "10" = "generate_masked_splits.R"
 )
 
 if (!as.character(START_FROM) %in% names(steps)) {
