@@ -7,3 +7,4 @@ data/splits/normalized/valid_norm.csv
 data/splits/normalized/test_norm.csv
 .claude/
 .Renviron
+.venv/

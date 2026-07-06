@@ -1,0 +1,22 @@
+{
+  "source_subset": [
+    "aadf",
+    "osm",
+    "meteo"
+  ],
+  "cv_macro_f1": 0.4379658949771329,
+  "n_trials": 60,
+  "n_splits": 4,
+  "sample_frac": 0.3,
+  "params": {
+    "max_depth": 12,
+    "learning_rate": 0.026918037395858914,
+    "subsample": 0.7919951784003265,
+    "colsample_bytree": 0.7564565206620257,
+    "colsample_bylevel": 0.5605076849741755,
+    "min_child_weight": 10,
+    "gamma": 4.978008122506637,
+    "reg_alpha": 0.41949461732052384,
+    "reg_lambda": 0.0010428336272740935
+  }
+}

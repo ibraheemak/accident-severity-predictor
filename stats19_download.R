@@ -1,14 +1,14 @@
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 RUN_TIMESTAMP <- format(Sys.time(), "%Y%m%d_%H%M%S")
-YEARS         <- 2020:2025
+YEARS         <- 2016:2025
 OUTPUT_DIR    <- paste0("data/raw/stats19_", RUN_TIMESTAMP)
 RANDOM_SEED   <- 42
 # Sampling caps per year (keep all rows if actual count is below the cap):
 #   - Fatal   : keep ALL rows (no cap)
 #   - Serious : up to SERIOUS_CAP rows
 #   - Slight  : up to SLIGHT_CAP rows
-SERIOUS_CAP <- 5000L
-SLIGHT_CAP  <- 10000L
+SERIOUS_CAP <- 2800L
+SLIGHT_CAP  <- 5600L
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Package setup ─────────────────────────────────────────────────────────────

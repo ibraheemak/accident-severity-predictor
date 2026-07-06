@@ -1,0 +1,180 @@
+{
+  "subset": [
+    "aadf",
+    "osm",
+    "meteo"
+  ],
+  "data_variant": "raw",
+  "feature_columns": [
+    "day_of_week",
+    "hour",
+    "number_of_vehicles",
+    "first_road_class",
+    "first_road_number",
+    "road_type",
+    "speed_limit",
+    "junction_detail",
+    "junction_control",
+    "second_road_class",
+    "second_road_number",
+    "pedestrian_crossing",
+    "urban_or_rural_area",
+    "trunk_road_flag",
+    "light_conditions",
+    "has_motorcycle",
+    "has_car",
+    "has_hgv",
+    "has_pedal_cycle",
+    "has_minibus",
+    "has_bus_coach",
+    "has_ridden_horse",
+    "has_agricultural",
+    "has_tram",
+    "has_van",
+    "has_mobility_scooter",
+    "has_other_vehicle",
+    "has_unknown_vehicle",
+    "has_towing",
+    "has_escooter",
+    "aadf_traffic_volume",
+    "aadf_distance_m",
+    "has_speed_camera",
+    "dist_to_speed_camera_m",
+    "has_traffic_calming",
+    "has_traffic_signals",
+    "lane_count",
+    "has_median",
+    "temperature_2m_c",
+    "precipitation_mm",
+    "wind_speed_10m_kmh",
+    "weather_code",
+    "snowfall_cm",
+    "snow_depth_m"
+  ],
+  "best_iteration": 419,
+  "params": {
+    "n_estimators": 1000,
+    "seed": 42,
+    "max_depth": 12,
+    "learning_rate": 0.026918037395858914,
+    "subsample": 0.7919951784003265,
+    "colsample_bytree": 0.7564565206620257,
+    "colsample_bylevel": 0.5605076849741755,
+    "min_child_weight": 10,
+    "gamma": 4.978008122506637,
+    "reg_alpha": 0.41949461732052384,
+    "reg_lambda": 0.0010428336272740935
+  },
+  "valid": {
+    "macro_f1": 0.45379032242385264
+  },
+  "test": {
+    "macro_f1": 0.46324486855753927
+  },
+  "valid_full": {
+    "macro_f1": 0.45379032242385264,
+    "report": {
+      "Fatal": {
+        "precision": 0.23171135385633895,
+        "recall": 0.6244424620874219,
+        "f1-score": 0.3380009657170449,
+        "support": 1121.0
+      },
+      "Serious": {
+        "precision": 0.38175586606907463,
+        "recall": 0.38623632968791677,
+        "f1-score": 0.3839830283744365,
+        "support": 3749.0
+      },
+      "Slight": {
+        "precision": 0.751305600576265,
+        "recall": 0.5564892623716153,
+        "f1-score": 0.6393869731800766,
+        "support": 7497.0
+      },
+      "accuracy": 0.51103743834398,
+      "macro avg": {
+        "precision": 0.4549242735005596,
+        "recall": 0.522389351382318,
+        "f1-score": 0.45379032242385264,
+        "support": 12367.0
+      },
+      "weighted avg": {
+        "precision": 0.5921799350761038,
+        "recall": 0.51103743834398,
+        "f1-score": 0.5346434538591093,
+        "support": 12367.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        700,
+        278,
+        143
+      ],
+      [
+        1063,
+        1448,
+        1238
+      ],
+      [
+        1258,
+        2067,
+        4172
+      ]
+    ]
+  },
+  "test_full": {
+    "macro_f1": 0.46324486855753927,
+    "report": {
+      "Fatal": {
+        "precision": 0.23372395833333334,
+        "recall": 0.6365248226950354,
+        "f1-score": 0.3419047619047619,
+        "support": 1128.0
+      },
+      "Serious": {
+        "precision": 0.40120703227499344,
+        "recall": 0.40762463343108507,
+        "f1-score": 0.4043903729172177,
+        "support": 3751.0
+      },
+      "Slight": {
+        "precision": 0.7606837606837606,
+        "recall": 0.5575103292016527,
+        "f1-score": 0.6434394708506384,
+        "support": 7503.0
+      },
+      "accuracy": 0.5193022128896786,
+      "macro avg": {
+        "precision": 0.46520491709736245,
+        "recall": 0.5338865951092577,
+        "f1-score": 0.46324486855753927,
+        "support": 12382.0
+      },
+      "weighted avg": {
+        "precision": 0.603777940516375,
+        "recall": 0.5193022128896786,
+        "f1-score": 0.5435521894712804,
+        "support": 12382.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        718,
+        271,
+        139
+      ],
+      [
+        1045,
+        1529,
+        1177
+      ],
+      [
+        1309,
+        2011,
+        4183
+      ]
+    ]
+  }
+}

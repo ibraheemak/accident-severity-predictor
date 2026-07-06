@@ -1,75 +1,75 @@
-[2026-06-24 00:16:03] === FULL RUN ===
-[2026-06-24 00:16:03] Output:    data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv
-[2026-06-24 00:16:03] Cache dir: data/raw/osm_cache
-[2026-06-24 00:16:03] Log file:  data/features/stats19+aadf+osm/add_osm_features.log
-[2026-06-24 00:16:03] ━━ 1. Load input ━━
-[2026-06-24 00:16:03]   Loaded 82491 rows × 41 cols from data/features/stats19+aadf/stats19+aadf_combined_realtime_features.csv
-[2026-06-24 00:16:03]   82481 rows have valid coordinates (10 missing)
-[2026-06-24 00:16:04]   82481 rows entering spatial pipeline
-[2026-06-24 00:16:04]   → done in 0.4s
-[2026-06-24 00:16:04] ━━ 2. Build road refs ━━
-[2026-06-24 00:16:04]   50366/82481 accidents have a matchable road ref (61%)
-[2026-06-24 00:16:04]   → done in 0.1s
-[2026-06-24 00:16:04] ━━ 3. Compute bounding box ━━
-[2026-06-24 00:16:04]   lon [-7.3887, 1.7580]  lat [49.9705, 60.4359]
-[2026-06-24 00:16:04]   Approx bbox area: 1179413 km²
-[2026-06-24 00:16:04]   → done in 0.0s
-[2026-06-24 00:16:04] ━━ 5. OSM downloads ━━
-[2026-06-24 00:16:04]   [cache hit] speed_cameras (data/raw/osm_cache/speed_cameras.rds)
-[2026-06-24 00:16:04]   [cache hit] traffic_calming (data/raw/osm_cache/traffic_calming.rds)
-[2026-06-24 00:16:08]   [cache hit] traffic_signals (data/raw/osm_cache/traffic_signals.rds)
-[2026-06-24 00:16:09]   → done in 5.3s
-[2026-06-24 00:16:09] ━━ 6. Prepare OSM sf objects ━━
-[2026-06-24 00:16:10]   [cache hit] road_ways_raw
-[2026-06-24 00:16:23]   [cache hit] barrier_ways
-[2026-06-24 00:16:28]   OSM object counts:
-[2026-06-24 00:16:28]     road_ways                 4682879
-[2026-06-24 00:16:28]     barrier_ways              2945760
-[2026-06-24 00:16:28]     speed_cam_nodes           3433
-[2026-06-24 00:16:28]     traffic_calm_nodes        233993
-[2026-06-24 00:16:28]     traffic_signal_nodes      87589
-[2026-06-24 00:16:29]   368788/4682879 road ways carry a ref tag (8%)
-[2026-06-24 00:16:29]   → done in 19.4s
-[2026-06-24 00:16:29] ━━ 8. Way-level features (lanes/divider) ━━
-[2026-06-24 00:16:29]   Matching 82481 accidents to road ways within 50m …
-[2026-06-24 00:16:55]   Way matches: 82368 matched, 0 unmatched (100.0% coverage)
-[2026-06-24 00:16:55]   → done in 26.6s
-[2026-06-24 00:16:55] ━━ 9. Median / barrier check ━━
-[2026-06-24 00:16:55]   Checking 2945760 barrier ways within 15m of each accident …
-[2026-06-24 00:17:02]   12729 accidents have a nearby barrier way
-[2026-06-24 00:17:02]   has_median = 1 for 12718/82368 accidents (15.4%)
-[2026-06-24 00:17:02]   → done in 7.1s
-[2026-06-24 00:17:02] ━━ 12. Speed camera features ━━
-[2026-06-24 00:17:08]   2945/3433 nodes assigned a road ref via nearest way (within 100m)
-[2026-06-24 00:17:11]   12756 candidate (accident, speed_camera) pairs within 500m
-[2026-06-24 00:17:11]   4901/12756 candidate pairs pass ref filter (62% use fallback)
-[2026-06-24 00:17:11]   8399/82481 accidents have at least one speed_camera within 500m
-[2026-06-24 00:17:11]   → done in 8.9s
-[2026-06-24 00:17:11] ━━ 13. Traffic calming features ━━
-[2026-06-24 00:17:20]   20562/233993 nodes assigned a road ref via nearest way (within 100m)
-[2026-06-24 00:17:23]   29048 candidate (accident, traffic_calming) pairs within 50m
-[2026-06-24 00:17:23]   6289/29048 candidate pairs pass ref filter (78% use fallback)
-[2026-06-24 00:17:24]   9981/82481 accidents have at least one traffic_calming within 50m
-[2026-06-24 00:17:24]   → done in 12.5s
-[2026-06-24 00:17:24] ━━ 14. Traffic signal features ━━
-[2026-06-24 00:17:31]   46716/87589 nodes assigned a road ref via nearest way (within 100m)
-[2026-06-24 00:17:34]   43941 candidate (accident, traffic_signal) pairs within 50m
-[2026-06-24 00:17:35]   19711/43941 candidate pairs pass ref filter (55% use fallback)
-[2026-06-24 00:17:35]   14640/82481 accidents have at least one traffic_signal within 50m
-[2026-06-24 00:17:35]   → done in 11.8s
-[2026-06-24 00:17:35] ━━ 15. Assemble output ━━
-[2026-06-24 00:17:35]   Output table: 82491 rows × 47 cols
-[2026-06-24 00:17:35]   ── OSM feature statistics (n = 82491) ──
-[2026-06-24 00:17:35]   has_speed_camera              yes=8399 (10.2%)  no=74082 (89.8%)  NA=10
-[2026-06-24 00:17:35]   has_median                    yes=12718 (15.4%)  no=69650 (84.4%)  NA=123
-[2026-06-24 00:17:35]   has_traffic_calming           yes=9981 (12.1%)  no=72500 (87.9%)  NA=10
-[2026-06-24 00:17:35]   has_traffic_signals           yes=14640 (17.7%)  no=67841 (82.2%)  NA=10
-[2026-06-24 00:17:35]   dist_to_speed_camera_m        n=8399  min=2m  median=304m  mean=288m  max=500m
-[2026-06-24 00:17:35]   lane_count                    filled=46258 / 82491 (56.1%)
-[2026-06-24 00:17:35]     distribution: 2 lanes: 35195  |  3 lanes: 5898  |  1 lanes: 2810  |  4 lanes: 2097  |  5 lanes: 207  |  6 lanes: 45
-[2026-06-24 00:17:35]     median=2  mean=2.2  range=[1, 10]
-[2026-06-24 00:17:35]   → done in 0.0s
-[2026-06-24 00:17:35] ━━ 17. Write output ━━
-[2026-06-24 00:17:35]   Written: data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv
-[2026-06-24 00:17:35]   Done. 82491 rows × 47 columns.
-[2026-06-24 00:17:35]   → done in 0.1s
+[2026-07-06 22:30:54] === FULL RUN ===
+[2026-07-06 22:30:54] Output:    data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv
+[2026-07-06 22:30:54] Cache dir: data/raw/osm_cache
+[2026-07-06 22:30:54] Log file:  data/features/stats19+aadf+osm/add_osm_features.log
+[2026-07-06 22:30:54] ━━ 1. Load input ━━
+[2026-07-06 22:30:54]   Loaded 89791 rows × 41 cols from data/features/stats19+aadf/stats19+aadf_combined_realtime_features.csv
+[2026-07-06 22:30:54]   89779 rows have valid coordinates (12 missing)
+[2026-07-06 22:30:54]   89779 rows entering spatial pipeline
+[2026-07-06 22:30:54]   → done in 0.6s
+[2026-07-06 22:30:54] ━━ 2. Build road refs ━━
+[2026-07-06 22:30:55]   55629/89779 accidents have a matchable road ref (62%)
+[2026-07-06 22:30:55]   → done in 0.1s
+[2026-07-06 22:30:55] ━━ 3. Compute bounding box ━━
+[2026-07-06 22:30:55]   lon [-7.3887, 1.7544]  lat [49.9808, 60.4359]
+[2026-07-06 22:30:55]   Approx bbox area: 1177783 km²
+[2026-07-06 22:30:55]   → done in 0.0s
+[2026-07-06 22:30:55] ━━ 5. OSM downloads ━━
+[2026-07-06 22:30:55]   [cache hit] speed_cameras (data/raw/osm_cache/speed_cameras.rds)
+[2026-07-06 22:30:55]   [cache hit] traffic_calming (data/raw/osm_cache/traffic_calming.rds)
+[2026-07-06 22:30:59]   [cache hit] traffic_signals (data/raw/osm_cache/traffic_signals.rds)
+[2026-07-06 22:31:00]   → done in 5.5s
+[2026-07-06 22:31:00] ━━ 6. Prepare OSM sf objects ━━
+[2026-07-06 22:31:01]   [cache hit] road_ways_raw
+[2026-07-06 22:31:19]   [cache hit] barrier_ways
+[2026-07-06 22:31:26]   OSM object counts:
+[2026-07-06 22:31:26]     road_ways                 4682879
+[2026-07-06 22:31:26]     barrier_ways              2945760
+[2026-07-06 22:31:26]     speed_cam_nodes           3433
+[2026-07-06 22:31:26]     traffic_calm_nodes        233993
+[2026-07-06 22:31:26]     traffic_signal_nodes      87589
+[2026-07-06 22:31:27]   368788/4682879 road ways carry a ref tag (8%)
+[2026-07-06 22:31:27]   → done in 26.6s
+[2026-07-06 22:31:27] ━━ 8. Way-level features (lanes/divider) ━━
+[2026-07-06 22:31:27]   Matching 89779 accidents to road ways within 50m …
+[2026-07-06 22:32:19]   Way matches: 89580 matched, 0 unmatched (100.0% coverage)
+[2026-07-06 22:32:20]   → done in 53.2s
+[2026-07-06 22:32:20] ━━ 9. Median / barrier check ━━
+[2026-07-06 22:32:20]   Checking 2945760 barrier ways within 15m of each accident …
+[2026-07-06 22:32:31]   13799 accidents have a nearby barrier way
+[2026-07-06 22:32:31]   has_median = 1 for 13787/89580 accidents (15.4%)
+[2026-07-06 22:32:31]   → done in 11.7s
+[2026-07-06 22:32:31] ━━ 12. Speed camera features ━━
+[2026-07-06 22:32:39]   2945/3433 nodes assigned a road ref via nearest way (within 100m)
+[2026-07-06 22:32:42]   13732 candidate (accident, speed_camera) pairs within 500m
+[2026-07-06 22:32:43]   5341/13732 candidate pairs pass ref filter (61% use fallback)
+[2026-07-06 22:32:43]   8980/89779 accidents have at least one speed_camera within 500m
+[2026-07-06 22:32:43]   → done in 11.4s
+[2026-07-06 22:32:43] ━━ 13. Traffic calming features ━━
+[2026-07-06 22:32:54]   20562/233993 nodes assigned a road ref via nearest way (within 100m)
+[2026-07-06 22:33:05]   30418 candidate (accident, traffic_calming) pairs within 50m
+[2026-07-06 22:33:06]   6759/30418 candidate pairs pass ref filter (78% use fallback)
+[2026-07-06 22:33:06]   10221/89779 accidents have at least one traffic_calming within 50m
+[2026-07-06 22:33:06]   → done in 23.3s
+[2026-07-06 22:33:06] ━━ 14. Traffic signal features ━━
+[2026-07-06 22:33:15]   46716/87589 nodes assigned a road ref via nearest way (within 100m)
+[2026-07-06 22:33:18]   45904 candidate (accident, traffic_signal) pairs within 50m
+[2026-07-06 22:33:19]   20322/45904 candidate pairs pass ref filter (56% use fallback)
+[2026-07-06 22:33:20]   15377/89779 accidents have at least one traffic_signal within 50m
+[2026-07-06 22:33:20]   → done in 13.8s
+[2026-07-06 22:33:20] ━━ 15. Assemble output ━━
+[2026-07-06 22:33:20]   Output table: 89791 rows × 47 cols
+[2026-07-06 22:33:20]   ── OSM feature statistics (n = 89791) ──
+[2026-07-06 22:33:20]   has_speed_camera              yes=8980 (10.0%)  no=80799 (90.0%)  NA=12
+[2026-07-06 22:33:20]   has_median                    yes=13787 (15.4%)  no=75793 (84.4%)  NA=211
+[2026-07-06 22:33:20]   has_traffic_calming           yes=10221 (11.4%)  no=79558 (88.6%)  NA=12
+[2026-07-06 22:33:20]   has_traffic_signals           yes=15377 (17.1%)  no=74402 (82.9%)  NA=12
+[2026-07-06 22:33:20]   dist_to_speed_camera_m        n=8980  min=1m  median=304m  mean=288m  max=500m
+[2026-07-06 22:33:20]   lane_count                    filled=51405 / 89791 (57.2%)
+[2026-07-06 22:33:20]     distribution: 2 lanes: 39400  |  3 lanes: 6450  |  1 lanes: 2923  |  4 lanes: 2367  |  5 lanes: 224  |  6 lanes: 36
+[2026-07-06 22:33:20]     median=2  mean=2.2  range=[1, 8]
+[2026-07-06 22:33:20]   → done in 0.1s
+[2026-07-06 22:33:20] ━━ 17. Write output ━━
+[2026-07-06 22:33:20]   Written: data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv
+[2026-07-06 22:33:20]   Done. 89791 rows × 47 columns.
+[2026-07-06 22:33:20]   → done in 0.2s
