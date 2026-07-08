@@ -37,9 +37,10 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import GroupKFold
 from sklearn.utils.class_weight import compute_sample_weight
 
-from train_classifier import MODEL_DIR, SPLIT_DIR, TARGET_COL, feature_columns, prepare_xy
+from train_classifier import DATA_VARIANT_DIRS, MODEL_DIR, TARGET_COL, feature_columns, prepare_xy
 
 SOURCES = ["aadf", "osm", "meteo"]  # Full-Acquisition subset only
+SPLIT_DIR = DATA_VARIANT_DIRS["masked"]
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -61,10 +62,15 @@ def subsample_by_group(df: pd.DataFrame, frac: float, seed: int) -> pd.DataFrame
 
 
 def make_objective(df: pd.DataFrame, cols: list[str], n_splits: int, n_estimators: int,
-                    early_stopping_rounds: int, seed: int):
-    X_all, y_all = prepare_xy(df, cols)
+                    early_stopping_rounds: int, seed: int, binary: bool):
+    X_all, y_all = prepare_xy(df, cols, binary)
     groups = df["collision_index"].values
     fold_indices = list(GroupKFold(n_splits=n_splits).split(X_all, y_all, groups))
+
+    if binary:
+        objective_kwargs = {"objective": "binary:logistic", "eval_metric": "logloss"}
+    else:
+        objective_kwargs = {"objective": "multi:softprob", "num_class": 3, "eval_metric": "mlogloss"}
 
     def objective(trial: optuna.Trial) -> float:
         params = {
@@ -86,14 +92,12 @@ def make_objective(df: pd.DataFrame, cols: list[str], n_splits: int, n_estimator
             sample_weight = compute_sample_weight("balanced", y_tr)
 
             model = xgb.XGBClassifier(
-                objective="multi:softprob",
-                num_class=3,
                 n_estimators=n_estimators,
                 tree_method="hist",
-                eval_metric="mlogloss",
                 early_stopping_rounds=early_stopping_rounds,
                 random_state=seed,
                 n_jobs=-1,
+                **objective_kwargs,
                 **params,
             )
             model.fit(X_tr, y_tr, sample_weight=sample_weight,
@@ -120,10 +124,13 @@ def main():
     parser.add_argument("--n-estimators", type=int, default=800)
     parser.add_argument("--early-stopping-rounds", type=int, default=25)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--binary", action="store_true",
+                         help="Tune for the Slight-vs-Severe binary objective instead of the "
+                              "3-class one; saves to best_hyperparams_binary.json.")
     args = parser.parse_args()
 
     cols = feature_columns(SOURCES)
-    print(f"Full-Acquisition subset: {len(cols)} feature columns")
+    print(f"Full-Acquisition subset: {len(cols)} feature columns  binary={args.binary}")
 
     pool = load_pool(cols)
     print(f"Pooled train+valid: {pool['collision_index'].nunique()} collision groups, {len(pool)} rows")
@@ -133,7 +140,7 @@ def main():
           f"({args.n_splits}-fold GroupKFold)")
 
     objective = make_objective(cv_df, cols, args.n_splits, args.n_estimators,
-                                args.early_stopping_rounds, args.seed)
+                                args.early_stopping_rounds, args.seed, args.binary)
 
     sampler = optuna.samplers.TPESampler(seed=args.seed)
     pruner = optuna.pruners.MedianPruner(n_warmup_steps=1)
@@ -154,10 +161,11 @@ def main():
     print(f"Best params: {study.best_params}")
 
     MODEL_DIR.mkdir(exist_ok=True)
-    out_path = MODEL_DIR / "best_hyperparams.json"
+    out_path = MODEL_DIR / ("best_hyperparams_binary.json" if args.binary else "best_hyperparams.json")
     with open(out_path, "w") as f:
         json.dump({
             "source_subset": SOURCES,
+            "binary": args.binary,
             "cv_macro_f1": study.best_value,
             "n_trials": args.n_trials,
             "n_splits": args.n_splits,
@@ -165,8 +173,10 @@ def main():
             "params": study.best_params,
         }, f, indent=2)
     print(f"Best hyperparameters saved to {out_path}")
-    print("\nNext: python train_classifier.py --sources aadf osm meteo --use-best-params")
-    print("      (and reuse --use-best-params for the other 7 subsets too)")
+    binary_flag = " --binary" if args.binary else ""
+    print(f"\nNext: python train_classifier.py --sources aadf osm meteo{binary_flag} --use-best-params")
+    if not args.binary:
+        print("      (and reuse --use-best-params for the other 7 subsets too)")
 
 
 if __name__ == "__main__":

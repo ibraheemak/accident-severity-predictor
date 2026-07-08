@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
-INPUT_FILE  <- "data/features/stats19+aadf+osm+meteo/stats19+aadf+osm+meteo_combined_realtime_features.csv"
+INPUT_FILE  <- "data/features/stats19+aadf+osm+meteo+risk+cas/stats19+aadf+osm+meteo+risk+cas_combined_realtime_features.csv"
 OUTPUT_DIR  <- "data/splits"
 TRAIN_FRAC  <- 0.70
 VALID_FRAC  <- 0.15

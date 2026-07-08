@@ -7,9 +7,12 @@
 #   5  = join AADF traffic volume onto combined table     (join_aadf.R)
 #   6  = join OpenStreetMap road infrastructure features  (add_osm_features.R)
 #   7  = join Open-Meteo historical weather features      (add_openmeteo_features.R)
-#   8  = stratified train/valid/test split                (split_train_valid_test.R)
-#   9  = feature normalization                            (normalize_splits.R)
-#   10 = masked-copy generation                           (generate_masked_splits.R)
+#   8  = drop rows with no possible weather lookup        (drop_invalid_meteo_rows.R)
+#   9  = spatial risk-density features (prior years only) (add_risk_density_features.R)
+#   10 = dispatch-time casualty features + join           (build_realtime_casualty_features.R)
+#   11 = stratified train/valid/test split                (split_train_valid_test.R)
+#   12 = feature normalization                            (normalize_splits.R)
+#   13 = masked-copy generation                           (generate_masked_splits.R)
 #
 # All later steps are run too. If START_FROM > 1, the pipeline uses the most
 # recent data/raw/stats19_* download as input.
@@ -34,9 +37,12 @@ steps <- list(
   "5"  = "join_aadf.R",
   "6"  = "add_osm_features.R",
   "7"  = "add_openmeteo_features.R",
-  "8"  = "split_train_valid_test.R",
-  "9"  = "normalize_splits.R",
-  "10" = "generate_masked_splits.R"
+  "8"  = "drop_invalid_meteo_rows.R",
+  "9"  = "add_risk_density_features.R",
+  "10" = "build_realtime_casualty_features.R",
+  "11" = "split_train_valid_test.R",
+  "12" = "normalize_splits.R",
+  "13" = "generate_masked_splits.R"
 )
 
 if (!as.character(START_FROM) %in% names(steps)) {

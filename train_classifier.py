@@ -21,6 +21,7 @@ Usage:
     python train_classifier.py --sources aadf
     python train_classifier.py --data-variant normalized   # normalized, not masked
     python train_classifier.py --data-variant raw          # neither normalized nor masked
+    python train_classifier.py --binary                    # Slight vs. Severe (Fatal+Serious merged)
 """
 
 import argparse
@@ -58,6 +59,7 @@ DATA_VARIANT_TIME_COLS = {
 MODEL_DIR = Path("models")
 
 SEVERITY_LABELS = {0: "Fatal", 1: "Serious", 2: "Slight"}  # 0-based, from raw 1/2/3
+BINARY_LABELS = {0: "Slight", 1: "Severe (Fatal+Serious)"}  # --binary: merges Fatal+Serious
 
 # Columns that are never features: join keys, traceability, masking bookkeeping.
 METADATA_COLS = [
@@ -81,6 +83,27 @@ BASE_COLS = [
     "has_bus_coach", "has_ridden_horse", "has_agricultural", "has_tram",
     "has_van", "has_mobility_scooter", "has_other_vehicle",
     "has_unknown_vehicle", "has_towing", "has_escooter",
+    # Spatial risk-density features (add_risk_density_features.R): derived
+    # purely from lat/lon against prior-year accident history, so they're
+    # free at 999-call time -- base features, not an acquirable source.
+    "hist_acc_rate_500m", "hist_severe_frac_500m", "hist_fatal_rate_500m",
+    "dist_to_nearest_hist_acc_m",
+    # Dispatch-time casualty facts (build_realtime_casualty_features.R):
+    # what a 999 caller reports -- how many hurt, pedestrian involvement,
+    # rough ages. Recorded injury severity is deliberately excluded.
+    "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
+    "oldest_casualty_age",
+]
+
+# Nominal/unordered category codes (mirrors NOMINAL_COLS in
+# normalize_splits.R, which leaves these as raw integer codes rather than
+# z-scoring them). Cast to pandas `category` dtype + XGBoost's
+# enable_categorical=True so the tree can use native categorical splits
+# instead of treating unordered codes as if they had numeric order.
+CATEGORICAL_COLS = [
+    "first_road_class", "road_type", "junction_detail", "junction_control",
+    "second_road_class", "pedestrian_crossing", "urban_or_rural_area",
+    "light_conditions", "weather_conditions", "weather_code",
 ]
 
 # Per-source feature columns, added only when that source is in --sources.
@@ -95,6 +118,16 @@ SOURCE_COLS = {
         "weather_code", "snowfall_cm", "snow_depth_m",
     ],
 }
+
+# feature_importance_audit.py flagged 11 features with negative permutation
+# importance on the Full-Acquisition model (mostly the sparsest/highest-
+# missingness fields -- junction_control 70.8% missing, dist_to_speed_camera_m
+# 90.2%, second_road_number 69.8% -- plus OSM current-day-snapshot / zero-
+# inflated weather fields). Tested dropping them and retraining: net
+# *worse* (test macro F1 0.4674->0.4631 uncalibrated, 0.4768->0.4747
+# calibrated) -- permutation importance on one trained model doesn't
+# reliably predict what a retrain-from-scratch does without those features.
+# Reverted; kept all columns below.
 
 
 def subset_name(sources: list[str]) -> str:
@@ -123,25 +156,40 @@ def load_split(name: str, cols: list[str], variant: str = "masked") -> pd.DataFr
     return df
 
 
-def prepare_xy(df: pd.DataFrame, cols: list[str]):
+def prepare_xy(df: pd.DataFrame, cols: list[str], binary: bool = False):
     X = df[cols].copy()
     y = df[TARGET_COL].astype(int) - 1  # 1/2/3 (Fatal/Serious/Slight) -> 0/1/2
+    if binary:
+        y = (y != 2).astype(int)  # 1 = Severe (was Fatal or Serious), 0 = Slight
     return X, y
 
 
-def evaluate(model: xgb.XGBClassifier, X: pd.DataFrame, y: pd.Series, split: str) -> dict:
+def unify_categorical_dtypes(frames: list[pd.DataFrame], cols: list[str]) -> list[str]:
+    """Cast nominal columns to a shared pandas CategoricalDtype (union of
+    categories across all frames), in place, so train/valid/test agree on
+    category codes for XGBoost's native categorical splits. Returns the
+    categorical columns actually present."""
+    present = [c for c in CATEGORICAL_COLS if c in cols]
+    for col in present:
+        categories = sorted(pd.concat([f[col] for f in frames]).dropna().unique())
+        dtype = pd.CategoricalDtype(categories=categories)
+        for f in frames:
+            f[col] = f[col].astype(dtype)
+    return present
+
+
+def evaluate(model: xgb.XGBClassifier, X: pd.DataFrame, y: pd.Series, split: str,
+             labels: dict = SEVERITY_LABELS) -> dict:
     y_pred = model.predict(X)
     macro_f1 = f1_score(y, y_pred, average="macro")
+    target_names = [labels[i] for i in range(len(labels))]
     report = classification_report(
-        y, y_pred, target_names=[SEVERITY_LABELS[i] for i in range(3)],
-        output_dict=True, zero_division=0,
+        y, y_pred, target_names=target_names, output_dict=True, zero_division=0,
     )
     cm = confusion_matrix(y, y_pred).tolist()
     print(f"\n[{split}] macro F1 = {macro_f1:.4f}")
-    print(classification_report(
-        y, y_pred, target_names=[SEVERITY_LABELS[i] for i in range(3)], zero_division=0,
-    ))
-    print(f"[{split}] confusion matrix (rows=true, cols=pred, order=Fatal/Serious/Slight):\n{np.array(cm)}")
+    print(classification_report(y, y_pred, target_names=target_names, zero_division=0))
+    print(f"[{split}] confusion matrix (rows=true, cols=pred, order={'/'.join(target_names)}):\n{np.array(cm)}")
     return {"macro_f1": macro_f1, "report": report, "confusion_matrix": cm}
 
 
@@ -166,6 +214,9 @@ def main():
                               "hyperparameters instead of --max-depth/--learning-rate, so all "
                               "8 subset classifiers share the config tuned once on the "
                               "Full-Acquisition subset.")
+    parser.add_argument("--binary", action="store_true",
+                         help="Merge Fatal+Serious into one 'Severe' class and train a binary "
+                              "Slight-vs-Severe classifier instead of the 3-class one.")
     args = parser.parse_args()
 
     name = subset_name(args.sources)
@@ -177,29 +228,36 @@ def main():
     test_df = load_split("test", cols, args.data_variant)
     print(f"Rows: train={len(train_df)}  valid={len(valid_df)}  test={len(test_df)}")
 
-    X_train, y_train = prepare_xy(train_df, cols)
-    X_valid, y_valid = prepare_xy(valid_df, cols)
-    X_test, y_test = prepare_xy(test_df, cols)
+    X_train, y_train = prepare_xy(train_df, cols, args.binary)
+    X_valid, y_valid = prepare_xy(valid_df, cols, args.binary)
+    X_test, y_test = prepare_xy(test_df, cols, args.binary)
+
+    categorical_cols = unify_categorical_dtypes([X_train, X_valid, X_test], cols)
+    print(f"Categorical columns ({len(categorical_cols)}): {categorical_cols}")
 
     sample_weight = compute_sample_weight("balanced", y_train)
 
     if args.use_best_params:
-        best_path = MODEL_DIR / "best_hyperparams.json"
+        best_path = MODEL_DIR / ("best_hyperparams_binary.json" if args.binary else "best_hyperparams.json")
         with open(best_path) as f:
             xgb_params = json.load(f)["params"]
         print(f"Using tuned hyperparameters from {best_path}: {xgb_params}")
     else:
         xgb_params = {"max_depth": args.max_depth, "learning_rate": args.learning_rate}
 
+    if args.binary:
+        objective_kwargs = {"objective": "binary:logistic", "eval_metric": "logloss"}
+    else:
+        objective_kwargs = {"objective": "multi:softprob", "num_class": 3, "eval_metric": "mlogloss"}
+
     model = xgb.XGBClassifier(
-        objective="multi:softprob",
-        num_class=3,
         n_estimators=args.n_estimators,
         tree_method="hist",
-        eval_metric="mlogloss",
+        enable_categorical=True,
         early_stopping_rounds=args.early_stopping_rounds,
         random_state=args.seed,
         n_jobs=-1,
+        **objective_kwargs,
         **xgb_params,
     )
     model.fit(
@@ -210,12 +268,15 @@ def main():
     )
     print(f"Best iteration: {model.best_iteration}")
 
-    valid_metrics = evaluate(model, X_valid, y_valid, "valid")
-    test_metrics = evaluate(model, X_test, y_test, "test")
+    labels = BINARY_LABELS if args.binary else SEVERITY_LABELS
+    valid_metrics = evaluate(model, X_valid, y_valid, "valid", labels)
+    test_metrics = evaluate(model, X_test, y_test, "test", labels)
 
-    # Non-default variants get a filename suffix so they don't clobber the
-    # main "masked" model/metrics used everywhere else.
+    # Non-default variants/binary get a filename suffix so they don't clobber
+    # the main "masked" 3-class model/metrics used everywhere else.
     file_stem = name if args.data_variant == "masked" else f"{name}_{args.data_variant}"
+    if args.binary:
+        file_stem += "_binary"
 
     MODEL_DIR.mkdir(exist_ok=True)
     model_path = MODEL_DIR / f"classifier_{file_stem}.json"
@@ -224,7 +285,9 @@ def main():
     meta = {
         "subset": args.sources,
         "data_variant": args.data_variant,
+        "binary": args.binary,
         "feature_columns": cols,
+        "categorical_columns": categorical_cols,
         "best_iteration": int(model.best_iteration),
         "params": {
             "n_estimators": args.n_estimators,

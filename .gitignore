@@ -8,3 +8,4 @@ data/splits/normalized/test_norm.csv
 .claude/
 .Renviron
 .venv/
+models/

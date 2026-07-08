@@ -42,7 +42,11 @@ ACQUIRABLE_COLS <- c(
   "has_hgv", "has_pedal_cycle", "has_minibus", "has_bus_coach",
   "has_ridden_horse", "has_agricultural", "has_tram", "has_van",
   "has_mobility_scooter", "has_other_vehicle", "has_unknown_vehicle",
-  "has_towing", "has_escooter"
+  "has_towing", "has_escooter",
+  # Casualty facts a 999 caller reports -- ask-the-dispatcher fields, so
+  # maskable like the vehicle-type flags (build_realtime_casualty_features.R).
+  "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
+  "oldest_casualty_age"
 )
 N_ACQUIRABLE <- length(ACQUIRABLE_COLS)
 

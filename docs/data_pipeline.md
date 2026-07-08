@@ -3,6 +3,15 @@
 This document summarizes the data acquisition and feature-extraction pipeline
 built for the accident severity predictor project.
 
+> **Revision note (July 2026):** the pipeline now samples years **2016–2025**
+> with per-year caps **2,800 Serious / 5,600 Slight** (Fatal uncapped),
+> yielding **89,791 collisions (15.8% Fatal)** — chosen deliberately to nearly
+> double the Fatal class share vs. the original 2020–2024 run (9.1%), which
+> was the project's main accuracy bottleneck. Row counts and NA percentages
+> quoted in sections 2–8 below are from the original 82k-row run and are
+> indicative only; the structure of each step is unchanged. Sections 9–13
+> reflect the current run.
+
 ---
 
 ## 1. Download & Sampling — `stats19_download.R`
@@ -11,11 +20,16 @@ Downloads UK STATS19 road safety data via the official `stats19` R package.
 
 ### Config
 ```r
-YEARS       <- 2020:2025
-SERIOUS_CAP <- 5000   # per year
-SLIGHT_CAP  <- 10000  # per year
+YEARS       <- 2016:2025
+SERIOUS_CAP <- 2800   # per year
+SLIGHT_CAP  <- 5600   # per year
 RANDOM_SEED <- 42
 ```
+
+Fatal is never capped, so extending the year range grows the Fatal class
+"for free" while the shrunken Serious/Slight caps keep their 9-year totals
+near the original 5-year totals — net effect: Fatal share 9.1% → 15.8%
+without ballooning the dataset (82,491 → 89,791 rows).
 
 ### What it does
 1. For each year, downloads three tables: **collisions**, **casualties**, **vehicles**
@@ -23,8 +37,8 @@ RANDOM_SEED <- 42
      are `"collision"`, `"casualty"`, `"vehicle"`; join key is `collision_index`.
 2. **Severity-aware sampling** (applied to collisions only, then propagated):
    - Fatal: keep **all** rows
-   - Serious: keep up to `SERIOUS_CAP` (5,000), all if fewer available
-   - Slight: keep up to `SLIGHT_CAP` (10,000), all if fewer available
+   - Serious: keep up to `SERIOUS_CAP` (2,800), all if fewer available
+   - Slight: keep up to `SLIGHT_CAP` (5,600), all if fewer available
 3. Casualties and vehicles are filtered to the same sampled `collision_index`
    values, so all three tables stay row-aligned across the full pipeline.
 4. **Two parallel versions of every table are downloaded**:
@@ -449,10 +463,95 @@ Rscript analyze_meteo_features.R
 
 ---
 
-## 9. Train/Valid/Test Split — `split_train_valid_test.R`
+## 9. Spatial Risk-Density Features — `add_risk_density_features.R`
 
-Splits the final combined feature table (`stats19+aadf+osm+meteo_combined_realtime_features.csv`,
-82,481 rows) into train/validation/test sets, stratified by
+Adds four location-risk features answering *"how much accident history does
+this place have?"* — dangerous locations stay dangerous, and no other
+feature captures location-specific risk directly.
+
+### Leakage design
+For an accident in year Y, features are computed **only from accidents in
+years strictly < Y** — never the accident itself, never same-year or future
+accidents. Past accidents are public knowledge at 999-call time, so these
+are legitimately available at inference. First-year rows (2016) have no
+history in the dataset and get NA for all four columns (XGBoost handles NaN
+natively).
+
+### Known bias, accepted
+The dataset is severity-sampled (all Fatal, capped Serious/Slight per
+year), so `hist_severe_frac_500m` is inflated relative to the true
+population fraction — but the sampling fraction is constant across *space*
+within each year, so the relative variation between locations (what the
+model actually uses) is preserved.
+
+### New columns
+
+| Column | Description |
+|---|---|
+| `hist_acc_rate_500m` | Prior-year accidents within 500 m ÷ number of prior years |
+| `hist_severe_frac_500m` | Fraction of those that were Fatal or Serious (NA if none nearby) |
+| `hist_fatal_rate_500m` | Prior-year Fatal accidents within 500 m ÷ number of prior years |
+| `dist_to_nearest_hist_acc_m` | Distance to the nearest prior-year accident |
+
+Implementation: points are projected once to EPSG:27700 (metres, same as
+`join_aadf.R`) and matched per-year against the pooled prior-year accidents
+with `sf::st_is_within_distance()` / `st_nearest_feature()`.
+
+Sanity check from the current run: median `hist_acc_rate_500m` is 0.67/yr
+for urban rows vs 0.00/yr for rural, as expected. Effect on the
+Full-Acquisition classifier: ~+0.005 macro F1 — small but consistent on
+both valid and test, for both the 3-class and binary targets. In the RL
+framing these are **base** features (derived purely from lat/lon against a
+precomputed history — zero acquisition cost), so they are never masked.
+
+### Output: `data/features/stats19+aadf+osm+meteo+risk/stats19+aadf+osm+meteo+risk_combined_realtime_features.csv`
+89,779 rows × 57 columns.
+
+---
+
+## 10. Dispatch-Time Casualty Features — `build_realtime_casualty_features.R`
+
+Aggregates the casualties **codes** table to one row per `collision_index`,
+keeping only what a 999 caller genuinely reports at dispatch time
+(*"a pedestrian's been hit"*, *"three people hurt"*, *"an elderly woman"*):
+
+| Column | Description |
+|---|---|
+| `n_casualties` | Number of casualty rows for the collision |
+| `n_pedestrian_casualties` | Casualties with `casualty_class == 3` (pedestrian) |
+| `youngest_casualty_age` | Minimum `age_of_casualty` (NA if none recorded) |
+| `oldest_casualty_age` | Maximum `age_of_casualty` (NA if none recorded) |
+
+Explicitly **excluded** as label-adjacent / post-hoc / officer-assessed:
+`casualty_severity`, `enhanced_casualty_severity`,
+`casualty_adjusted_severity_*`, `casualty_injury_based`,
+`casualty_imd_decile`, `lsoa_of_casualty`, `pedestrian_location`,
+`pedestrian_movement`.
+
+In the Active Feature Acquisition framing these are **ask-the-dispatcher**
+fields — knowable during the call but not necessarily volunteered up
+front — so they are added to `ACQUIRABLE_COLS` in
+`generate_masked_splits.R` (28 → 32 maskable fields), exactly like the
+vehicle-type flags.
+
+This was the single largest accuracy improvement in the project: 3-class
+calibrated test macro F1 **0.478 → 0.501** (Fatal F1 0.40 → 0.45, precision
+*and* recall both up), binary Slight-vs-Severe test macro F1
+**0.631 → 0.651**.
+
+The script also left-joins the four columns onto the risk-feature table
+(every STATS19 collision has ≥ 1 casualty row, so the join introduces no
+NAs — asserted in the script).
+
+### Output: `data/features/stats19+aadf+osm+meteo+risk+cas/stats19+aadf+osm+meteo+risk+cas_combined_realtime_features.csv`
+89,779 rows × 61 columns — this is the table the split step consumes.
+
+---
+
+## 11. Train/Valid/Test Split — `split_train_valid_test.R`
+
+Splits the final combined feature table (`stats19+aadf+osm+meteo+risk+cas_combined_realtime_features.csv`,
+89,779 rows) into train/validation/test sets, stratified by
 `collision_year` × `collision_severity` so every set contains data from
 every year with the same severity mix.
 
@@ -474,17 +573,17 @@ overall.
 ### Output: `data/splits/{train,valid,test}.csv`
 | Split | Rows | % of total |
 |---|---|---|
-| train | 57,732 | 70.0% |
-| valid | 12,367 | 15.0% |
-| test  | 12,382 | 15.0% |
+| train | 62,828 | 70.0% |
+| valid | 13,458 | 15.0% |
+| test  | 13,493 | 15.0% |
 
 Per-year counts are balanced within ~0.1 pp of the target split fractions in
-every year (2020–2024); full breakdown in `data/splits/split_stats.txt`
+every year (2016–2024); full breakdown in `data/splits/split_stats.txt`
 (generated by the companion `check_split_stats.R`).
 
 ---
 
-## 10. Feature Normalization — `normalize_splits.R`
+## 12. Feature Normalization — `normalize_splits.R`
 
 Transforms every non-binary, non-metadata model feature before the data is
 handed to the masked-copy generator. All statistics are computed from the
@@ -525,20 +624,11 @@ Before z-scoring, `log1p(x)` is applied to every column in `ZSCORE_COLS`
 where the **train** skewness > 2 **and** train minimum ≥ 0. This compresses
 the heavy right tail so the z-score is not dominated by rare extreme values.
 
-10 columns met the threshold:
-
-| Column | Skewness |
-|---|---|
-| `aadf_distance_m` | 46.8 |
-| `snowfall_cm` | 34.9 |
-| `snow_depth_m` | 26.9 |
-| `precipitation_mm` | 8.7 |
-| `pedestrian_crossing` | 5.0 |
-| `junction_detail` | 4.6 |
-| `second_road_number` | 3.8 |
-| `weather_conditions` | 3.2 |
-| `aadf_traffic_volume` | 3.1 |
-| `first_road_number` | 2.3 |
+12 columns met the threshold on the current run: `first_road_number`,
+`second_road_number`, `aadf_traffic_volume`, `aadf_distance_m`,
+`precipitation_mm`, `snowfall_cm`, `snow_depth_m`, `hist_acc_rate_500m`,
+`hist_fatal_rate_500m`, `dist_to_nearest_hist_acc_m`, `n_casualties`,
+`n_pedestrian_casualties`.
 
 The threshold is computed at runtime from the actual train distribution, so
 it self-updates if the input data changes.
@@ -547,23 +637,32 @@ it self-updates if the input data changes.
 
 ### Step 3 — Z-score standardization
 
-All 23 columns in `ZSCORE_COLS` (post log1p where applicable) are
+All 17 columns in `ZSCORE_COLS` (post log1p where applicable) are
 standardized to mean 0 / SD 1 using train statistics:
 
 ```
 x_norm = (x − mean_train) / sd_train
 ```
 
-Columns normalized (binary flags, metadata, target, and the two cyclic
-columns handled above are excluded):
+Columns normalized (binary flags, metadata, target, cyclic columns, and
+nominal codes are excluded):
 
-`number_of_vehicles`, `first_road_class`, `first_road_number`, `road_type`,
-`speed_limit`, `junction_detail`, `junction_control`, `second_road_class`,
-`second_road_number`, `pedestrian_crossing`, `urban_or_rural_area`,
-`light_conditions`, `weather_conditions`, `aadf_traffic_volume`,
-`aadf_distance_m`, `dist_to_speed_camera_m`, `lane_count`,
-`temperature_2m_c`, `precipitation_mm`, `wind_speed_10m_kmh`, `weather_code`,
-`snowfall_cm`, `snow_depth_m`.
+`number_of_vehicles`, `first_road_number`, `speed_limit`,
+`second_road_number`, `aadf_traffic_volume`, `aadf_distance_m`,
+`dist_to_speed_camera_m`, `lane_count`, `temperature_2m_c`,
+`precipitation_mm`, `wind_speed_10m_kmh`, `snowfall_cm`, `snow_depth_m`,
+`hist_acc_rate_500m`, `hist_severe_frac_500m`, `hist_fatal_rate_500m`,
+`dist_to_nearest_hist_acc_m`, `n_casualties`, `n_pedestrian_casualties`,
+`youngest_casualty_age`, `oldest_casualty_age`.
+
+**Nominal codes are deliberately NOT z-scored** (`NOMINAL_COLS`:
+`first_road_class`, `road_type`, `junction_detail`, `junction_control`,
+`second_road_class`, `pedestrian_crossing`, `urban_or_rural_area`,
+`light_conditions`, `weather_conditions`, `weather_code`). They pass
+through as raw integer codes so XGBoost can use native categorical splits
+(`enable_categorical=True` + shared pandas `category` dtype in
+`train_classifier.py`) instead of treating unordered codes as if they had
+a numeric order.
 
 A zero-SD guard fires a hard error if any column is constant on train —
 such a column carries no information and should be removed, not silently
@@ -588,7 +687,7 @@ left as NaN.
 
 ---
 
-## 11. Masked-Copy Generation for Partial-Observability Training — `generate_masked_splits.R`
+## 13. Masked-Copy Generation for Partial-Observability Training — `generate_masked_splits.R`
 
 The model needs to perform well when only some STATS19 fields have been
 acquired at inference time (a "999 call" scenario where the responder
@@ -596,7 +695,7 @@ doesn't yet know e.g. `junction_detail` or `second_road_class`). To train
 for this, every row in each split is expanded into multiple copies with
 varying amounts of feature masking.
 
-Reads from `data/splits/normalized/` (output of step 10); masking is applied
+Reads from `data/splits/normalized/` (output of step 12); masking is applied
 to already-normalized values so masked-out NAs carry no unnormalized scale.
 
 ### Column categories
@@ -604,25 +703,31 @@ to already-normalized values so masked-out NAs carry no unnormalized scale.
   `collision_index`, `collision_year`, `longitude`, `latitude`, `date`,
   `data_year`, `collision_severity`, `day_of_week_sin`, `day_of_week_cos`,
   `hour_sin`, `hour_cos` (the raw `day_of_week` and `time` columns were
-  replaced by their cyclic encodings in step 10).
-- **`ACQUIRABLE_COLS`** (28, candidates for masking): `number_of_vehicles`,
+  replaced by their cyclic encodings in step 12).
+- **`ACQUIRABLE_COLS`** (32, candidates for masking): `number_of_vehicles`,
   `first_road_class`, `first_road_number`, `road_type`, `speed_limit`,
   `junction_detail`, `junction_control`, `second_road_class`,
   `second_road_number`, `pedestrian_crossing`, `urban_or_rural_area`,
-  `trunk_road_flag`, `light_conditions`, and the 15 `has_*` vehicle-type
-  flags.
-- All other columns (AADF, OSM, Open-Meteo features, `weather_conditions`)
-  are left untouched in every copy — they're out of scope for this
-  call-time partial-observability simulation.
+  `trunk_road_flag`, `light_conditions`, the 15 `has_*` vehicle-type flags,
+  and the 4 casualty columns from step 10 (`n_casualties`,
+  `n_pedestrian_casualties`, `youngest_casualty_age`,
+  `oldest_casualty_age`) — ask-the-dispatcher fields, maskable like the
+  vehicle-type flags.
+- All other columns (AADF, OSM, Open-Meteo, risk-density features,
+  `weather_conditions`) are left untouched in every copy — they're out of
+  scope for this call-time partial-observability simulation, either because
+  they're external-source features (their own acquisition cost governs
+  availability) or, for risk-density, because they're free/always-available
+  base features.
 
 ### Method (per row, independently)
-1. Sample 10 distinct integers from `0:28` without replacement — these are
+1. Sample 10 distinct integers from `0:32` without replacement — these are
    the mask counts assigned to `copy_id` 0–9.
-2. For each copy, randomly pick exactly that many of the 28 acquirable
+2. For each copy, randomly pick exactly that many of the 32 acquirable
    columns and set them to `NA`.
 3. The original, fully-observed row is kept as `copy_id = -1`,
    `mask_rate = 0.0`.
-4. Every copy gets a `mask_rate` column = `masked_count / 28` (0.0 for the
+4. Every copy gets a `mask_rate` column = `masked_count / 32` (0.0 for the
    original, otherwise matches the sampled count for that copy).
 
 Each original row therefore becomes 11 rows (1 unmasked + 10 masked), all
@@ -631,9 +736,9 @@ columns preserved, seed 42 for reproducibility.
 ### Output: `data/splits/masked/{train,valid,test}_masked.csv`
 | Split | Original rows | Expanded rows |
 |---|---|---|
-| train | 57,732 | 635,052 |
-| valid | 12,367 | 136,037 |
-| test  | 12,382 | 136,202 |
+| train | 62,828 | 691,108 |
+| valid | 13,458 | 148,038 |
+| test  | 13,493 | 148,423 |
 
 Note: `mask_rate` reflects only the fields *deliberately* masked by this
 script. Some acquirable fields already had genuine NAs in the source data
@@ -648,21 +753,27 @@ Computed directly from the same mask matrix used to generate the files
 pre-existing NAs above):
 
 - **`{split}_mask_count_distribution.csv`** / **`combined_mask_count_distribution.csv`**
-  — for each mask count 0–28, how many masked copies have exactly that many
-  fields masked (count + % of all masked copies). Roughly uniform (~3.45%
-  per count), as expected from sampling without replacement across 29
-  possible values.
+  — for each mask count 0–32, how many masked copies have exactly that many
+  fields masked (count + % of all masked copies). Roughly uniform, as
+  expected from sampling without replacement across 33 possible values.
 - **`{split}_feature_mask_frequency.csv`** / **`combined_feature_mask_frequency.csv`**
-  — for each of the 28 acquirable fields, how many times it was masked
+  — for each of the 32 acquirable fields, how many times it was masked
   across all masked copies and the %. All land around ~50%, since each
-  masked copy masks on average 14/28 fields.
+  masked copy masks roughly half the acquirable fields on average.
 
 ---
 
-## 12. Next steps (not yet done)
+## 14. Next steps (not yet done)
 
 - Decide treatment for `light_conditions` (replace with an external API at
   inference, or keep the STATS19 value) — `weather_conditions` is now
   superseded by the Open-Meteo features above.
-- Casualty-derived features (if any) — not yet built; `casualties` codes/labels
-  CSVs are available but unused so far.
+- ~~Casualty-derived features~~ — done, see section 10.
+- Extend `YEARS` further back (e.g. to ~2010) to grow Fatal further, following
+  the same recipe as the current 2016 extension — untested, diminishing
+  returns likely as accident patterns drift over a longer window.
+- De-bias `hist_severe_frac_500m` by the known per-year sampling fractions
+  (currently accepted as-is; see section 9).
+- Re-tune XGBoost hyperparameters for the current 54-column feature set —
+  `models/best_hyperparams.json` / `best_hyperparams_binary.json` predate
+  the risk-density and casualty features.

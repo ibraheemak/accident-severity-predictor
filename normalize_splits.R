@@ -18,16 +18,30 @@ NORM_DIR       <- file.path(SPLIT_DIR, "normalized")
 SPLITS         <- c("train", "valid", "test")
 LOG1P_SKEW_THRESHOLD <- 2.0
 
-# Columns to z-score (excludes binary flags, metadata, target, and cyclic cols
-# which are handled separately below).
+# Columns to z-score (excludes binary flags, metadata, target, cyclic cols
+# handled separately below, and nominal/categorical codes -- see
+# NOMINAL_COLS -- which pass through as raw codes for XGBoost's native
+# categorical split support instead of being treated as ordinal).
 ZSCORE_COLS <- c(
-  "number_of_vehicles", "first_road_class", "first_road_number",
-  "road_type", "speed_limit", "junction_detail", "junction_control",
-  "second_road_class", "second_road_number", "pedestrian_crossing",
-  "urban_or_rural_area", "light_conditions", "weather_conditions",
+  "number_of_vehicles", "first_road_number", "speed_limit",
+  "second_road_number",
   "aadf_traffic_volume", "aadf_distance_m", "dist_to_speed_camera_m",
   "lane_count", "temperature_2m_c", "precipitation_mm", "wind_speed_10m_kmh",
-  "weather_code", "snowfall_cm", "snow_depth_m"
+  "snowfall_cm", "snow_depth_m",
+  "hist_acc_rate_500m", "hist_severe_frac_500m", "hist_fatal_rate_500m",
+  "dist_to_nearest_hist_acc_m",
+  "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
+  "oldest_casualty_age"
+)
+
+# Nominal/unordered category codes: left as raw integers (NaNs preserved for
+# genuine missingness and for masking downstream) rather than z-scored, so
+# XGBoost can use native categorical splits instead of treating them as if
+# they had a numeric order.
+NOMINAL_COLS <- c(
+  "first_road_class", "road_type", "junction_detail", "junction_control",
+  "second_road_class", "pedestrian_crossing", "urban_or_rural_area",
+  "light_conditions", "weather_conditions", "weather_code"
 )
 
 # --- helpers -----------------------------------------------------------------
@@ -58,6 +72,7 @@ dfs <- lapply(SPLITS, function(s) {
 names(dfs) <- SPLITS
 
 stopifnot(all(ZSCORE_COLS %in% names(dfs$train)))
+stopifnot(all(NOMINAL_COLS %in% names(dfs$train)))
 stopifnot(all(c("day_of_week", "time") %in% names(dfs$train)))
 
 # --- 1. cyclic encoding (applied uniformly, no train-fit needed) -------------
