@@ -774,6 +774,12 @@ pre-existing NAs above):
   returns likely as accident patterns drift over a longer window.
 - De-bias `hist_severe_frac_500m` by the known per-year sampling fractions
   (currently accepted as-is; see section 9).
-- Re-tune XGBoost hyperparameters for the current 54-column feature set —
-  `models/best_hyperparams.json` / `best_hyperparams_binary.json` predate
-  the risk-density and casualty features.
+- ~~Re-tune XGBoost hyperparameters for the current 54-column feature set~~ —
+  done. Re-ran `tune_full_acquisition_classifier.py` (60 trials 3-class, 100
+  trials binary) on the current feature set; the search converged to
+  essentially the same params as before (old config wasn't actually stale),
+  but retraining all 8 subset classifiers with `--use-best-params` still
+  lifted the flagship (aadf+osm+meteo) 3-class test macro F1 from 0.4845 to
+  0.4928 uncalibrated (0.503 → 0.5028 calibrated), driven mostly by the
+  weak "Serious" class (F1 0.339 → 0.39). Binary flagship macro F1 stayed
+  flat (0.651 → 0.6517).

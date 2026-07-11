@@ -179,7 +179,7 @@ def unify_categorical_dtypes(frames: list[pd.DataFrame], cols: list[str]) -> lis
 
 
 def evaluate(model: xgb.XGBClassifier, X: pd.DataFrame, y: pd.Series, split: str,
-             labels: dict = SEVERITY_LABELS) -> dict:
+             labels: dict = SEVERITY_LABELS, verbose: bool = True) -> dict:
     y_pred = model.predict(X)
     macro_f1 = f1_score(y, y_pred, average="macro")
     target_names = [labels[i] for i in range(len(labels))]
@@ -187,9 +187,10 @@ def evaluate(model: xgb.XGBClassifier, X: pd.DataFrame, y: pd.Series, split: str
         y, y_pred, target_names=target_names, output_dict=True, zero_division=0,
     )
     cm = confusion_matrix(y, y_pred).tolist()
-    print(f"\n[{split}] macro F1 = {macro_f1:.4f}")
-    print(classification_report(y, y_pred, target_names=target_names, zero_division=0))
-    print(f"[{split}] confusion matrix (rows=true, cols=pred, order={'/'.join(target_names)}):\n{np.array(cm)}")
+    if verbose:
+        print(f"\n[{split}] macro F1 = {macro_f1:.4f}")
+        print(classification_report(y, y_pred, target_names=target_names, zero_division=0))
+        print(f"[{split}] confusion matrix (rows=true, cols=pred, order={'/'.join(target_names)}):\n{np.array(cm)}")
     return {"macro_f1": macro_f1, "report": report, "confusion_matrix": cm}
 
 
@@ -203,6 +204,18 @@ def main():
                               "no deliberate NaNs) -- isolates the effect of masking. "
                               "'raw': neither normalized nor masked -- isolates the effect of "
                               "normalization too.")
+    parser.add_argument("--eval-variant", choices=list(DATA_VARIANT_DIRS), default=None,
+                         help="Evaluate valid/test on this variant instead of --data-variant, "
+                              "while still training on --data-variant. E.g. "
+                              "--data-variant masked --eval-variant normalized trains on the "
+                              "masked (partial-observability) splits but evaluates on the clean, "
+                              "unmasked, one-row-per-collision splits -- tests whether masking "
+                              "during training helps or hurts when the model is scored at "
+                              "full-information inference time, rather than being diluted across "
+                              "the masked test set's mix of missingness levels. Only variants "
+                              "with matching feature schemas can be combined (masked <-> "
+                              "normalized both use cyclic day/hour encoding; 'raw' uses a "
+                              "different time encoding and can't be mixed with the other two).")
     parser.add_argument("--n-estimators", type=int, default=1000)
     parser.add_argument("--max-depth", type=int, default=6)
     parser.add_argument("--learning-rate", type=float, default=0.05)
@@ -219,13 +232,16 @@ def main():
                               "Slight-vs-Severe classifier instead of the 3-class one.")
     args = parser.parse_args()
 
+    eval_variant = args.eval_variant or args.data_variant
+
     name = subset_name(args.sources)
     cols = feature_columns(args.sources, args.data_variant)
-    print(f"Subset: {name}  data_variant={args.data_variant}  ({len(cols)} feature columns)")
+    print(f"Subset: {name}  data_variant={args.data_variant}  eval_variant={eval_variant}  "
+          f"({len(cols)} feature columns)")
 
     train_df = load_split("train", cols, args.data_variant)
-    valid_df = load_split("valid", cols, args.data_variant)
-    test_df = load_split("test", cols, args.data_variant)
+    valid_df = load_split("valid", cols, eval_variant)
+    test_df = load_split("test", cols, eval_variant)
     print(f"Rows: train={len(train_df)}  valid={len(valid_df)}  test={len(test_df)}")
 
     X_train, y_train = prepare_xy(train_df, cols, args.binary)
@@ -275,6 +291,8 @@ def main():
     # Non-default variants/binary get a filename suffix so they don't clobber
     # the main "masked" 3-class model/metrics used everywhere else.
     file_stem = name if args.data_variant == "masked" else f"{name}_{args.data_variant}"
+    if eval_variant != args.data_variant:
+        file_stem += f"_evalon_{eval_variant}"
     if args.binary:
         file_stem += "_binary"
 
@@ -285,6 +303,7 @@ def main():
     meta = {
         "subset": args.sources,
         "data_variant": args.data_variant,
+        "eval_variant": eval_variant,
         "binary": args.binary,
         "feature_columns": cols,
         "categorical_columns": categorical_cols,
