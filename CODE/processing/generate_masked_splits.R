@@ -38,11 +38,9 @@ ACQUIRABLE_COLS <- c(
   "number_of_vehicles", "first_road_class", "first_road_number", "road_type",
   "speed_limit", "junction_detail", "junction_control", "second_road_class",
   "second_road_number", "pedestrian_crossing", "urban_or_rural_area",
-  "trunk_road_flag", "light_conditions", "has_motorcycle", "has_car",
-  "has_hgv", "has_pedal_cycle", "has_minibus", "has_bus_coach",
-  "has_ridden_horse", "has_agricultural", "has_tram", "has_van",
-  "has_mobility_scooter", "has_other_vehicle", "has_unknown_vehicle",
-  "has_towing", "has_escooter",
+  "trunk_road_flag", "light_conditions",
+  "has_motorcycle", "has_pedal_cycle", "has_van", "has_car", "has_hgv",
+  "has_bus_coach", "has_towing",
   # Casualty facts a 999 caller reports -- ask-the-dispatcher fields, so
   # maskable like the vehicle-type flags (build_realtime_casualty_features.R).
   "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",

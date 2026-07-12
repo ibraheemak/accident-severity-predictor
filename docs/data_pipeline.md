@@ -114,50 +114,40 @@ sample, ~82.5k rows): `junction_control` 44.6%, `second_road_number` 40.3%,
 
 ---
 
-## 4. Realtime Vehicle Features — `build_vehicle_features.R`
+## 4. Realtime Vehicle Features — `build_realtime_vehicle_features.R`
 
 Reads the **codes** vehicles CSV, filters to realtime columns, then aggregates
 from one-row-per-vehicle to **one row per `collision_index`** using multi-hot
 binary flags (since a collision can involve multiple vehicles).
 
 ### Step 1 — keep only:
-`collision_index`, `vehicle_type`, `towing_and_articulation`, `escooter_flag`
+`collision_index`, `vehicle_type`, `towing_and_articulation`
 
 ### Step 2 — aggregate per collision into binary flags:
 
-**Combined groups** (multiple `vehicle_type` codes → one flag):
-| Flag | Codes |
+The ultra-rare per-vehicle-type flags (`has_minibus`, `has_ridden_horse`,
+`has_agricultural`, `has_tram`, `has_mobility_scooter`, `has_other_vehicle`,
+`has_unknown_vehicle`, `has_escooter`) stay dropped: all had <1.5% prevalence
+and showed overfitting (e.g. `has_tram` at 0.02% prevalence still appeared in
+123 tree splits — a memorization signature, not generalizable signal). Kept,
+each as its own flag: the seven vehicle-related flags with a healthy
+split-to-prevalence ratio in the original 15-flag model (real signal, not
+memorization) — `has_hgv` in particular had the highest gain of any of the
+15, and dropping it cost real accuracy (test macro F1 0.697 → 0.692 on the
+normalized binary variant):
+
+| Flag | Codes / definition |
 |---|---|
 | `has_motorcycle` | 2,3,4,5,23,97 |
+| `has_pedal_cycle` | 1 |
+| `has_van` | 19 |
 | `has_car` | 8,9 |
 | `has_hgv` | 20,21,98 |
-
-**Individual codes** (one flag per remaining `vehicle_type` code, no combining):
-| Flag | Code |
-|---|---|
-| `has_pedal_cycle` | 1 |
-| `has_minibus` | 10 |
 | `has_bus_coach` | 11 |
-| `has_ridden_horse` | 16 |
-| `has_agricultural` | 17 |
-| `has_tram` | 18 |
-| `has_van` | 19 |
-| `has_mobility_scooter` | 22 |
-| `has_other_vehicle` | 90 |
-| `has_unknown_vehicle` | 99 |
-
-**Other flags:**
-| Flag | Definition |
-|---|---|
 | `has_towing` | any vehicle has `towing_and_articulation` in 1–5 |
-| `has_escooter` | any vehicle has `escooter_flag == 1` |
 
 ### Output: `data/features/stats19/stats19_vehicle_realtime_features.csv`
-82,491 rows (one per collision) × 16 columns (`collision_index` + 15 flags).
-Flag prevalence on the 2020–2025 sample: `has_car` 84.8%, `has_motorcycle`
-17.7%, `has_pedal_cycle` 15.3%, `has_van` 10.9%, `has_hgv` 4.8%, `has_bus_coach`
-2.8%, `has_towing` 2.8%, `has_other_vehicle` 1.1%, `has_escooter` 1.1%, others
-< 1%.
+One row per collision × 8 columns (`collision_index` + the 7 flags above).
 
 ---
 
@@ -167,9 +157,9 @@ Left-joins the collision and vehicle realtime feature tables on `collision_index
 into a single model-ready file.
 
 ### Output: `data/features/stats19/stats19_combined_realtime_features.csv`
-82,491 rows × 38 columns (23 collision columns + 15 vehicle flags, minus the
-duplicate join key). Every sampled collision has a matching vehicle row, so no
-NAs are introduced by the join.
+23 collision columns + the 7 vehicle flags, minus the duplicate join key.
+Every sampled collision has a matching vehicle row, so no NAs are introduced
+by the join.
 
 ---
 
@@ -711,11 +701,12 @@ to already-normalized values so masked-out NAs carry no unnormalized scale.
   `data_year`, `collision_severity`, `day_of_week_sin`, `day_of_week_cos`,
   `hour_sin`, `hour_cos` (the raw `day_of_week` and `time` columns were
   replaced by their cyclic encodings in step 12).
-- **`ACQUIRABLE_COLS`** (32, candidates for masking): `number_of_vehicles`,
+- **`ACQUIRABLE_COLS`** (23, candidates for masking): `number_of_vehicles`,
   `first_road_class`, `first_road_number`, `road_type`, `speed_limit`,
   `junction_detail`, `junction_control`, `second_road_class`,
   `second_road_number`, `pedestrian_crossing`, `urban_or_rural_area`,
-  `trunk_road_flag`, `light_conditions`, the 15 `has_*` vehicle-type flags,
+  `trunk_road_flag`, `light_conditions`, `has_motorcycle`, `has_pedal_cycle`,
+  `has_van`, `has_car`, `has_hgv`, `has_bus_coach`, `has_towing`,
   and the 4 casualty columns from step 10 (`n_casualties`,
   `n_pedestrian_casualties`, `youngest_casualty_age`,
   `oldest_casualty_age`) — ask-the-dispatcher fields, maskable like the
@@ -728,13 +719,13 @@ to already-normalized values so masked-out NAs carry no unnormalized scale.
   base features.
 
 ### Method (per row, independently)
-1. Sample 10 distinct integers from `0:32` without replacement — these are
+1. Sample 10 distinct integers from `0:23` without replacement — these are
    the mask counts assigned to `copy_id` 0–9.
-2. For each copy, randomly pick exactly that many of the 32 acquirable
+2. For each copy, randomly pick exactly that many of the 23 acquirable
    columns and set them to `NA`.
 3. The original, fully-observed row is kept as `copy_id = -1`,
    `mask_rate = 0.0`.
-4. Every copy gets a `mask_rate` column = `masked_count / 32` (0.0 for the
+4. Every copy gets a `mask_rate` column = `masked_count / 23` (0.0 for the
    original, otherwise matches the sampled count for that copy).
 
 Each original row therefore becomes 11 rows (1 unmasked + 10 masked), all
@@ -760,11 +751,11 @@ Computed directly from the same mask matrix used to generate the files
 pre-existing NAs above):
 
 - **`{split}_mask_count_distribution.csv`** / **`combined_mask_count_distribution.csv`**
-  — for each mask count 0–32, how many masked copies have exactly that many
+  — for each mask count 0–23, how many masked copies have exactly that many
   fields masked (count + % of all masked copies). Roughly uniform, as
-  expected from sampling without replacement across 33 possible values.
+  expected from sampling without replacement across 24 possible values.
 - **`{split}_feature_mask_frequency.csv`** / **`combined_feature_mask_frequency.csv`**
-  — for each of the 32 acquirable fields, how many times it was masked
+  — for each of the 23 acquirable fields, how many times it was masked
   across all masked copies and the %. All land around ~50%, since each
   masked copy masks roughly half the acquirable fields on average.
 

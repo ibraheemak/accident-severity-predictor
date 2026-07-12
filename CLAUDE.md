@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A UK road-accident severity predictor (STATS19 data). The core deliverable is 8 frozen XGBoost classifiers (one per subset of 3 optional external data sources: AADF traffic, OSM road infrastructure, Open-Meteo weather), trained to predict Fatal/Serious/Slight (or binary Slight-vs-Severe) from only what a 999 dispatcher would know. The eventual goal (per README) is a Reinforcement Learning "Active Feature Acquisition" agent that decides at runtime which of the 3 external sources are worth acquiring before invoking the matching frozen classifier — the classifiers here are the environment that agent will sit on top of, not yet implemented.
 
+**Current focus:** improving the macro F1 of the binary Slight-vs-Severe classifier on the `normalized` (unmasked, clean one-row-per-collision) data variant — i.e. `models/classifier_aadf_meteo_osm_normalized_binary.json`. Prefer changes/experiments that target this specific model+variant over generic changes to the masked/3-class models unless asked otherwise.
+
 ## Repo layout
 
 ```

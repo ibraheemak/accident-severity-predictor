@@ -82,10 +82,8 @@ BASE_COLS = [
     "speed_limit", "junction_detail", "junction_control", "second_road_class",
     "second_road_number", "pedestrian_crossing", "urban_or_rural_area",
     "trunk_road_flag", "light_conditions",
-    "has_motorcycle", "has_car", "has_hgv", "has_pedal_cycle", "has_minibus",
-    "has_bus_coach", "has_ridden_horse", "has_agricultural", "has_tram",
-    "has_van", "has_mobility_scooter", "has_other_vehicle",
-    "has_unknown_vehicle", "has_towing", "has_escooter",
+    "has_motorcycle", "has_pedal_cycle", "has_van", "has_car", "has_hgv",
+    "has_bus_coach", "has_towing",
     # Spatial risk-density features (add_risk_density_features.R): derived
     # purely from lat/lon against prior-year accident history, so they're
     # free at 999-call time -- base features, not an acquirable source.

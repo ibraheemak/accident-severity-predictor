@@ -16,27 +16,26 @@ OUTPUT_FILE <- "stats19_vehicle_realtime_features.csv"
 KEEP_COLS <- c(
   "collision_index",   # infrastructure — join key
   "vehicle_type",
-  "towing_and_articulation",
-  "escooter_flag"
+  "towing_and_articulation"
 )
 
 # ── vehicle_type groupings ────────────────────────────────────────────────────
-# Only motorcycle / car / hgv are combined into multi-code groups.
-# All other vehicle_type codes get their own individual flag (no combining).
+# The ultra-rare codes (tram, ridden_horse, unknown_vehicle, minibus,
+# mobility_scooter, agricultural, other_vehicle, escooter -- all <1.5%
+# prevalence) stay dropped: they showed a memorization signature (e.g.
+# has_tram at 0.02% prevalence still appeared in 123 tree splits) rather than
+# generalizable signal. has_hgv, has_bus_coach, and has_towing are kept
+# despite low prevalence because each had a healthy split-to-prevalence ratio
+# in the original 15-flag model (real signal, not memorization) -- has_hgv in
+# particular had the highest gain of any of the 15, and dropping it cost real
+# accuracy (test macro F1 0.697 -> 0.692 on the normalized binary variant).
 VEHICLE_TYPE_GROUPS <- list(
-  has_motorcycle       = c(2, 3, 4, 5, 23, 97),
-  has_car              = c(8, 9),
-  has_hgv              = c(20, 21, 98),
-  has_pedal_cycle      = c(1),
-  has_minibus          = c(10),
-  has_bus_coach        = c(11),
-  has_ridden_horse     = c(16),
-  has_agricultural     = c(17),
-  has_tram             = c(18),
-  has_van              = c(19),
-  has_mobility_scooter = c(22),
-  has_other_vehicle    = c(90),
-  has_unknown_vehicle  = c(99)
+  has_motorcycle  = c(2, 3, 4, 5, 23, 97),
+  has_pedal_cycle = c(1),
+  has_van         = c(19),
+  has_car         = c(8, 9),
+  has_hgv         = c(20, 21, 98),
+  has_bus_coach   = c(11)
 )
 
 # ── Package setup ─────────────────────────────────────────────────────────────
@@ -80,10 +79,7 @@ main <- function() {
       !!!vehicle_type_flags,
 
       # ── towing: 1 if any vehicle had any tow/articulation (codes 1-5) ──
-      has_towing  = as.integer(any(towing_and_articulation %in% 1:5, na.rm = TRUE)),
-
-      # ── e-scooter: 1 if any vehicle in the collision was an e-scooter ──
-      has_escooter = as.integer(any(escooter_flag == 1, na.rm = TRUE)),
+      has_towing = as.integer(any(towing_and_articulation %in% 1:5, na.rm = TRUE)),
 
       .groups = "drop"
     )
