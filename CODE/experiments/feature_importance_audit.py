@@ -22,12 +22,15 @@ Usage:
 """
 
 import argparse
+import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import f1_score
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training" / "train"))
 from train_classifier import (
     MODEL_DIR, feature_columns, load_split, prepare_xy, subset_name,
     unify_categorical_dtypes,

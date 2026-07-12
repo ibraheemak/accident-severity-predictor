@@ -15,7 +15,7 @@
 #   13 = masked-copy generation                           (generate_masked_splits.R)
 #
 # All later steps are run too. If START_FROM > 1, the pipeline uses the most
-# recent data/raw/stats19_* download as input.
+# recent data/raw/stats19/stats19_* download as input.
 #
 # Note: step 6 (add_osm_features.R) downloads a ~2 GB Great Britain OSM PBF
 # extract on first run and can take several minutes even with a warm cache.
@@ -30,19 +30,19 @@ START_FROM <- 2
 # ──────────────────────────────────────────────────────────────────────────────
 
 steps <- list(
-  "1"  = "stats19_download.R",
-  "2"  = "build_realtime_collision_features.R",
-  "3"  = "build_realtime_vehicle_features.R",
-  "4"  = "build_combined_features.R",
-  "5"  = "join_aadf.R",
-  "6"  = "add_osm_features.R",
-  "7"  = "add_openmeteo_features.R",
-  "8"  = "drop_invalid_meteo_rows.R",
-  "9"  = "add_risk_density_features.R",
-  "10" = "build_realtime_casualty_features.R",
-  "11" = "split_train_valid_test.R",
-  "12" = "normalize_splits.R",
-  "13" = "generate_masked_splits.R"
+  "1"  = "CODE/downloading/stats19_download.R",
+  "2"  = "CODE/processing/stats19/build_realtime_collision_features.R",
+  "3"  = "CODE/processing/stats19/build_realtime_vehicle_features.R",
+  "4"  = "CODE/processing/build_combined_features.R",
+  "5"  = "CODE/processing/aadf/join_aadf.R",
+  "6"  = "CODE/processing/osm/add_osm_features.R",
+  "7"  = "CODE/processing/meteo/add_openmeteo_features.R",
+  "8"  = "CODE/processing/meteo/drop_invalid_meteo_rows.R",
+  "9"  = "CODE/processing/add_risk_density_features.R",
+  "10" = "CODE/processing/stats19/build_realtime_casualty_features.R",
+  "11" = "CODE/processing/split_train_valid_test.R",
+  "12" = "CODE/processing/normalize_splits.R",
+  "13" = "CODE/processing/generate_masked_splits.R"
 )
 
 if (!as.character(START_FROM) %in% names(steps)) {
@@ -56,10 +56,10 @@ if (START_FROM == 1) {
   # stats19_download.R defines OUTPUT_DIR for the run it just produced.
   PIPELINE_DATA_DIR <- OUTPUT_DIR
 } else {
-  raw_dirs <- list.dirs("data/raw", recursive = FALSE)
-  raw_dirs <- raw_dirs[grepl("^data/raw/stats19_", raw_dirs)]
+  raw_dirs <- list.dirs("data/raw/stats19", recursive = FALSE)
+  raw_dirs <- raw_dirs[grepl("^data/raw/stats19/stats19_", raw_dirs)]
   if (length(raw_dirs) == 0) {
-    stop("No data/raw/stats19_* directories found. Run from step 1 first.")
+    stop("No data/raw/stats19/stats19_* directories found. Run from step 1 first.")
   }
   PIPELINE_DATA_DIR <- sort(raw_dirs, decreasing = TRUE)[1]
   message("Using existing download: ", PIPELINE_DATA_DIR)

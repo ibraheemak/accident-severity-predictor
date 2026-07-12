@@ -35,12 +35,12 @@ INPUT_FILE <- "data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime
 if (DEBUG) {
   OUTPUT_DIR  <- "data/features/stats19+aadf+osm+meteo"
   OUTPUT_FILE <- file.path(OUTPUT_DIR, "stats19+aadf+osm+meteo_combined_realtime_features_debug.csv")
-  CACHE_DIR   <- "data/raw/openmeteo_cache/debug"
+  CACHE_DIR   <- "data/raw/openmeteo/cache/debug"
   LOG_FILE    <- file.path(OUTPUT_DIR, "add_openmeteo_features_debug.log")
 } else {
   OUTPUT_DIR  <- "data/features/stats19+aadf+osm+meteo"
   OUTPUT_FILE <- file.path(OUTPUT_DIR, "stats19+aadf+osm+meteo_combined_realtime_features.csv")
-  CACHE_DIR   <- "data/raw/openmeteo_cache"
+  CACHE_DIR   <- "data/raw/openmeteo/cache"
   LOG_FILE    <- file.path(OUTPUT_DIR, "add_openmeteo_features.log")
 }
 

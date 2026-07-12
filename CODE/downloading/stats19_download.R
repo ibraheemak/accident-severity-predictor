@@ -1,7 +1,7 @@
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 RUN_TIMESTAMP <- format(Sys.time(), "%Y%m%d_%H%M%S")
 YEARS         <- 2016:2025
-OUTPUT_DIR    <- paste0("data/raw/stats19_", RUN_TIMESTAMP)
+OUTPUT_DIR    <- paste0("data/raw/stats19/stats19_", RUN_TIMESTAMP)
 RANDOM_SEED   <- 42
 # Sampling caps per year (keep all rows if actual count is below the cap):
 #   - Fatal   : keep ALL rows (no cap)

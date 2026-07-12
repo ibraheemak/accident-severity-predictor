@@ -19,7 +19,9 @@ Usage:
 """
 
 import argparse
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
@@ -29,6 +31,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training" / "train"))
 from train_classifier import (
     SEVERITY_LABELS, evaluate, feature_columns, load_split, prepare_xy,
     subset_name, unify_categorical_dtypes,

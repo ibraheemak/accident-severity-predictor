@@ -1,5 +1,5 @@
 data/raw/aadf/dft_traffic_counts_aadf.csv
-data/raw/osm_cache/
+data/raw/osm/cache/
 data/splits/*_masked.csv
 data/splits/masked/*_masked.csv
 data/splits/normalized/train_norm.csv

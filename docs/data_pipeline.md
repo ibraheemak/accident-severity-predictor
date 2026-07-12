@@ -52,7 +52,7 @@ without ballooning the dataset (82,491 → 89,791 rows).
 
 ### Output structure
 ```
-data/raw/stats19_<TIMESTAMP>/
+data/raw/stats19/stats19_<TIMESTAMP>/
 ├── stats19_<TIMESTAMP>_meta.txt
 ├── labels/
 │   ├── stats19_<TIMESTAMP>_collisions.csv
@@ -267,7 +267,7 @@ record.
   read via the `osmextract` package. Geofabrik does not publish a
   separate England-only extract, so both debug and full runs that touch
   osmextract use the GB-wide file. The PBF (~2 GB) and its converted
-  GeoPackage are cached in `data/raw/osm_cache/` after the first run.
+  GeoPackage are cached in `data/raw/osm/cache/` after the first run.
 - **Point features** (speed cameras, traffic calming, traffic signals):
   queried live from the Overpass API (3 mirror servers, rotated on retry)
   using the bounding box of the accidents being processed.
@@ -328,7 +328,7 @@ Run matching achieved 100% coverage (every accident with valid coordinates
 matched to a road way within 50 m).
 
 ### Debug mode
-`Rscript add_osm_features.R --debug` processes 50 accidents clustered around
+`Rscript CODE/processing/osm/add_osm_features.R --debug` processes 50 accidents clustered around
 the dataset's median coordinate, with verbose `[DBG]` logging, writing to
 `stats19+aadf+osm_combined_realtime_features_debug.csv` and a separate debug
 log/cache directory.
@@ -378,7 +378,7 @@ This collapses what would be ~82,000 row-level calls down to roughly one
 call per distinct accident date (~1,800 for the 2020–2024 sample).
 
 ### Caching
-Each (date, batch) response is cached to `data/raw/openmeteo_cache/*.rds`,
+Each (date, batch) response is cached to `data/raw/openmeteo/cache/*.rds`,
 keyed as `<date>_b<batch_index>.rds`. A single full run never re-issues the
 same key, so the cache's value is purely for **resuming** an interrupted run
 (crash, rate limit, network failure) without re-fetching dates already
@@ -436,7 +436,7 @@ lat/lon (and therefore no possible weather lookup) and were removed by the
 companion script below rather than kept as all-NA.
 
 ### Debug mode
-`Rscript add_openmeteo_features.R --debug` processes the first 50 rows,
+`Rscript CODE/processing/meteo/add_openmeteo_features.R --debug` processes the first 50 rows,
 writing to `..._debug.csv` and a separate debug log/cache directory.
 
 ### Companion: `drop_invalid_meteo_rows.R`
@@ -444,7 +444,7 @@ Removes the 10 accidents with no valid lat/lon/date/time from the output
 table (`temperature_2m_c` is NA for exactly these rows — there was never any
 weather to look up). Run once after `add_openmeteo_features.R`:
 ```
-Rscript drop_invalid_meteo_rows.R
+Rscript CODE/processing/meteo/drop_invalid_meteo_rows.R
 ```
 
 ### Companion: `analyze_meteo_features.R`
@@ -458,7 +458,7 @@ continuous variables. Findings from the current sample: precipitation
 among the continuous features are all weak (|r| ≤ 0.16), i.e. little
 redundancy between them.
 ```
-Rscript analyze_meteo_features.R
+Rscript CODE/processing/qa/analyze_meteo_features.R
 ```
 
 ---
@@ -538,6 +538,13 @@ This was the single largest accuracy improvement in the project: 3-class
 calibrated test macro F1 **0.478 → 0.501** (Fatal F1 0.40 → 0.45, precision
 *and* recall both up), binary Slight-vs-Severe test macro F1
 **0.631 → 0.651**.
+
+An extended set of five demographic/mode-of-travel columns
+(child/elderly/cyclist/motorcyclist counts, age span) was trialled on top of
+these but removed: a controlled multi-seed ablation showed it worth only
++0.0012 macro F1 on the normalized variant (within noise) and +0.0052 on
+masked — not enough to justify five extra columns, so the feature set was
+reverted to the original four.
 
 The script also left-joins the four columns onto the risk-feature table
 (every STATS19 collision has ≥ 1 casualty row, so the join introduces no

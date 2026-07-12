@@ -1,7 +1,7 @@
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # PIPELINE_DATA_DIR may be set by run_pipeline.R; otherwise falls back to a fixed run.
 if (!exists("PIPELINE_DATA_DIR")) {
-  PIPELINE_DATA_DIR <- "data/raw/stats19_20260606_181720"
+  PIPELINE_DATA_DIR <- "data/raw/stats19/stats19_20260606_181720"
 }
 INPUT_VEHICLE_CSV <- file.path(
   PIPELINE_DATA_DIR, "codes",

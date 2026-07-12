@@ -37,12 +37,15 @@ Usage:
 
 import argparse
 import itertools
+import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 import xgboost as xgb
 from sklearn.utils.class_weight import compute_sample_weight
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training" / "train"))
 from train_classifier import (
     BINARY_LABELS, DATA_VARIANT_DIRS, SEVERITY_LABELS, SOURCE_COLS, evaluate,
     feature_columns, load_split, prepare_xy, subset_name,

@@ -46,12 +46,12 @@ INPUT_FILE <- "data/features/stats19+aadf/stats19+aadf_combined_realtime_feature
 if (DEBUG) {
   OUTPUT_DIR  <- "data/features/stats19+aadf+osm"
   OUTPUT_FILE <- file.path(OUTPUT_DIR, "stats19+aadf+osm_combined_realtime_features_debug.csv")
-  CACHE_DIR   <- "data/raw/osm_cache/debug"
+  CACHE_DIR   <- "data/raw/osm/cache/debug"
   LOG_FILE    <- file.path(OUTPUT_DIR, "add_osm_features_debug.log")
 } else {
   OUTPUT_DIR  <- "data/features/stats19+aadf+osm"
   OUTPUT_FILE <- file.path(OUTPUT_DIR, "stats19+aadf+osm_combined_realtime_features.csv")
-  CACHE_DIR   <- "data/raw/osm_cache"
+  CACHE_DIR   <- "data/raw/osm/cache"
   LOG_FILE    <- file.path(OUTPUT_DIR, "add_osm_features.log")
 }
 

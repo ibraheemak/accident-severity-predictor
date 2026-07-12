@@ -31,7 +31,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.metrics import classification_report, confusion_matrix, f1_score
+from sklearn.metrics import (
+    accuracy_score, balanced_accuracy_score, classification_report,
+    confusion_matrix, f1_score,
+)
 from sklearn.utils.class_weight import compute_sample_weight
 
 # Where each --data-variant reads its {train,valid,test} split from, and the
@@ -182,16 +185,21 @@ def evaluate(model: xgb.XGBClassifier, X: pd.DataFrame, y: pd.Series, split: str
              labels: dict = SEVERITY_LABELS, verbose: bool = True) -> dict:
     y_pred = model.predict(X)
     macro_f1 = f1_score(y, y_pred, average="macro")
+    accuracy = accuracy_score(y, y_pred)
+    balanced_accuracy = balanced_accuracy_score(y, y_pred)
     target_names = [labels[i] for i in range(len(labels))]
     report = classification_report(
         y, y_pred, target_names=target_names, output_dict=True, zero_division=0,
     )
     cm = confusion_matrix(y, y_pred).tolist()
     if verbose:
-        print(f"\n[{split}] macro F1 = {macro_f1:.4f}")
+        print(f"\n[{split}] macro F1 = {macro_f1:.4f}  accuracy = {accuracy:.4f}  "
+              f"balanced accuracy = {balanced_accuracy:.4f}")
         print(classification_report(y, y_pred, target_names=target_names, zero_division=0))
         print(f"[{split}] confusion matrix (rows=true, cols=pred, order={'/'.join(target_names)}):\n{np.array(cm)}")
-    return {"macro_f1": macro_f1, "report": report, "confusion_matrix": cm}
+    return {"macro_f1": macro_f1, "accuracy": accuracy,
+            "balanced_accuracy": balanced_accuracy, "report": report,
+            "confusion_matrix": cm}
 
 
 def main():
@@ -254,7 +262,14 @@ def main():
     sample_weight = compute_sample_weight("balanced", y_train)
 
     if args.use_best_params:
-        best_path = MODEL_DIR / ("best_hyperparams_binary.json" if args.binary else "best_hyperparams.json")
+        # Prefer a variant-specific tune (best_hyperparams_<variant>[_binary].json)
+        # when one exists; otherwise fall back to the masked-variant tune, which
+        # is shared across all 8 subset classifiers.
+        variant_suffix = "" if args.data_variant == "masked" else f"_{args.data_variant}"
+        binary_suffix = "_binary" if args.binary else ""
+        best_path = MODEL_DIR / f"best_hyperparams{variant_suffix}{binary_suffix}.json"
+        if not best_path.exists() and variant_suffix:
+            best_path = MODEL_DIR / f"best_hyperparams{binary_suffix}.json"
         with open(best_path) as f:
             xgb_params = json.load(f)["params"]
         print(f"Using tuned hyperparameters from {best_path}: {xgb_params}")

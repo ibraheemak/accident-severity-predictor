@@ -22,7 +22,10 @@ import json
 import numpy as np
 import xgboost as xgb
 from scipy.optimize import minimize
-from sklearn.metrics import classification_report, confusion_matrix, f1_score
+from sklearn.metrics import (
+    accuracy_score, balanced_accuracy_score, classification_report,
+    confusion_matrix, f1_score,
+)
 
 from train_classifier import (
     BINARY_LABELS, MODEL_DIR, SEVERITY_LABELS, evaluate, feature_columns,
@@ -37,15 +40,20 @@ def weighted_predict(proba: np.ndarray, weights: np.ndarray) -> np.ndarray:
 def evaluate_weighted(proba: np.ndarray, y, weights: np.ndarray, split: str, labels: dict) -> dict:
     y_pred = weighted_predict(proba, weights)
     macro_f1 = f1_score(y, y_pred, average="macro")
+    accuracy = accuracy_score(y, y_pred)
+    balanced_accuracy = balanced_accuracy_score(y, y_pred)
     target_names = [labels[i] for i in range(len(labels))]
     report = classification_report(
         y, y_pred, target_names=target_names, output_dict=True, zero_division=0,
     )
     cm = confusion_matrix(y, y_pred).tolist()
-    print(f"\n[{split}, weighted] macro F1 = {macro_f1:.4f}")
+    print(f"\n[{split}, weighted] macro F1 = {macro_f1:.4f}  accuracy = {accuracy:.4f}  "
+          f"balanced accuracy = {balanced_accuracy:.4f}")
     print(classification_report(y, y_pred, target_names=target_names, zero_division=0))
     print(f"[{split}, weighted] confusion matrix (rows=true, cols=pred, order={'/'.join(target_names)}):\n{np.array(cm)}")
-    return {"macro_f1": macro_f1, "report": report, "confusion_matrix": cm}
+    return {"macro_f1": macro_f1, "accuracy": accuracy,
+            "balanced_accuracy": balanced_accuracy, "report": report,
+            "confusion_matrix": cm}
 
 
 def main():
@@ -107,6 +115,8 @@ def main():
             "weights": {labels[i]: float(weights[i]) for i in range(n_classes)},
             "valid_macro_f1": valid_metrics["macro_f1"],
             "test_macro_f1": test_metrics["macro_f1"],
+            "test_accuracy": test_metrics["accuracy"],
+            "test_balanced_accuracy": test_metrics["balanced_accuracy"],
         }, f, indent=2)
     print(f"\nWeights saved to {out_path}")
 

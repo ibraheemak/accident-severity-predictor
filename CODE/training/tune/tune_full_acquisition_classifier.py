@@ -27,7 +27,9 @@ Usage:
 
 import argparse
 import json
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import optuna
@@ -37,18 +39,21 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import GroupKFold
 from sklearn.utils.class_weight import compute_sample_weight
 
-from train_classifier import DATA_VARIANT_DIRS, MODEL_DIR, TARGET_COL, feature_columns, prepare_xy
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "train"))
+from train_classifier import (
+    DATA_VARIANT_DIRS, DATA_VARIANT_FILE, MODEL_DIR, TARGET_COL,
+    feature_columns, prepare_xy,
+)
 
 SOURCES = ["aadf", "osm", "meteo"]  # Full-Acquisition subset only
-SPLIT_DIR = DATA_VARIANT_DIRS["masked"]
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
-def load_pool(cols: list[str]) -> pd.DataFrame:
+def load_pool(cols: list[str], variant: str) -> pd.DataFrame:
     frames = []
     for split in ["train", "valid"]:
-        path = SPLIT_DIR / f"{split}_masked.csv"
+        path = DATA_VARIANT_DIRS[variant] / DATA_VARIANT_FILE[variant].format(name=split)
         df = pd.read_csv(path, usecols=lambda c: c in cols + [TARGET_COL, "collision_index"])
         frames.append(df)
     return pd.concat(frames, ignore_index=True)
@@ -126,13 +131,21 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--binary", action="store_true",
                          help="Tune for the Slight-vs-Severe binary objective instead of the "
-                              "3-class one; saves to best_hyperparams_binary.json.")
+                              "3-class one; saves to best_hyperparams[_variant]_binary.json.")
+    parser.add_argument("--data-variant", choices=list(DATA_VARIANT_DIRS), default="masked",
+                         help="Which split to tune on. 'masked' (default) uses the 691k-row "
+                              "partial-observability splits; 'normalized' uses the clean 62k-row "
+                              "one-row-per-collision splits -- the optimal hyperparameters differ "
+                              "(the masked set's heavy regularization can be wrong for clean data). "
+                              "GroupKFold by collision_index is still valid for 'normalized' since "
+                              "each collision appears exactly once (equivalent to plain KFold).")
     args = parser.parse_args()
 
-    cols = feature_columns(SOURCES)
-    print(f"Full-Acquisition subset: {len(cols)} feature columns  binary={args.binary}")
+    variant = args.data_variant
+    cols = feature_columns(SOURCES, variant)
+    print(f"Full-Acquisition subset: {len(cols)} feature columns  variant={variant}  binary={args.binary}")
 
-    pool = load_pool(cols)
+    pool = load_pool(cols, variant)
     print(f"Pooled train+valid: {pool['collision_index'].nunique()} collision groups, {len(pool)} rows")
 
     cv_df = subsample_by_group(pool, args.sample_frac, args.seed)
@@ -161,10 +174,15 @@ def main():
     print(f"Best params: {study.best_params}")
 
     MODEL_DIR.mkdir(exist_ok=True)
-    out_path = MODEL_DIR / ("best_hyperparams_binary.json" if args.binary else "best_hyperparams.json")
+    # Filename: best_hyperparams[_variant][_binary].json. The 'masked' variant
+    # keeps the original unsuffixed names for backward compatibility.
+    variant_suffix = "" if variant == "masked" else f"_{variant}"
+    binary_suffix = "_binary" if args.binary else ""
+    out_path = MODEL_DIR / f"best_hyperparams{variant_suffix}{binary_suffix}.json"
     with open(out_path, "w") as f:
         json.dump({
             "source_subset": SOURCES,
+            "data_variant": variant,
             "binary": args.binary,
             "cv_macro_f1": study.best_value,
             "n_trials": args.n_trials,
@@ -174,7 +192,8 @@ def main():
         }, f, indent=2)
     print(f"Best hyperparameters saved to {out_path}")
     binary_flag = " --binary" if args.binary else ""
-    print(f"\nNext: python train_classifier.py --sources aadf osm meteo{binary_flag} --use-best-params")
+    variant_flag = "" if variant == "masked" else f" --data-variant {variant}"
+    print(f"\nNext: python train_classifier.py --sources aadf osm meteo{variant_flag}{binary_flag} --use-best-params")
     if not args.binary:
         print("      (and reuse --use-best-params for the other 7 subsets too)")
 

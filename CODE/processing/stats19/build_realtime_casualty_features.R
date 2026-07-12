@@ -25,7 +25,7 @@ suppressPackageStartupMessages({
 })
 
 if (!exists("PIPELINE_DATA_DIR")) {
-  PIPELINE_DATA_DIR <- "data/raw/stats19_20260706_193034"
+  PIPELINE_DATA_DIR <- "data/raw/stats19/stats19_20260706_193034"
 }
 INPUT_CASUALTY_CSV <- file.path(
   PIPELINE_DATA_DIR, "codes",
