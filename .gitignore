@@ -9,3 +9,9 @@ data/splits/normalized/test_norm.csv
 .Renviron
 .venv/
 models/
+# 2026-07-17 scale-up: raw STATS19 label CSVs exceed GitHub's 100 MB file
+# limit at 415k collisions (codes/ + meta are tracked; labels are the same
+# data with human-readable values and can be re-downloaded by stats19_download.R)
+data/raw/stats19/stats19_20260716_175811/labels/
+# obsolete pre-scale-up Open-Meteo cache (positional keys, 90k sample only)
+data/raw/openmeteo/cache_89k_sample_archived/

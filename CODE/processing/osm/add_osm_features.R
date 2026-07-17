@@ -78,6 +78,11 @@ ROAD_CLASS_PREFIX <- c(
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(CACHE_DIR,  showWarnings = FALSE, recursive = TRUE)
 
+# R's default options(timeout) is 60s *total* per download — the ~2 GB
+# Great Britain PBF osmextract fetches below can never finish in that budget
+# and aborts partway. Give internet operations a generous ceiling instead.
+options(timeout = max(3600, getOption("timeout")))
+
 log_con <- file(LOG_FILE, open = "wt")
 
 log_msg <- function(...) {
@@ -103,10 +108,11 @@ step <- local({
   }
 })
 
-on.exit({
-  log_msg("Log closed.")
-  close(log_con)
-}, add = TRUE)
+# NOTE: no top-level on.exit() here — when this script is source()d (e.g. by
+# run_pipeline.R), a top-level on.exit fires as soon as its own expression
+# finishes evaluating, closing log_con and crashing the next log_msg call.
+# The log is closed explicitly at the end of the script instead; on error the
+# process/session teardown reclaims the connection.
 
 log_msg(if (DEBUG) "=== DEBUG RUN (n=50) ===" else "=== FULL RUN ===")
 log_msg("Output:    ", OUTPUT_FILE)
@@ -238,7 +244,11 @@ OVERPASS_SERVERS <- c(
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
 )
 
-fetch_or_cache <- function(key, download_fn, max_retries = 3L) {
+# max_retries cycles through OVERPASS_SERVERS in order; 8 attempts = nearly
+# three full passes. The mail.ru mirror is unreachable from some networks and
+# fails instantly ("unavailable without internet"), so with only 3 attempts a
+# single 504 + 429 on the two working mirrors already exhausted the budget.
+fetch_or_cache <- function(key, download_fn, max_retries = 8L) {
   path <- file.path(CACHE_DIR, paste0(key, ".rds"))
   if (file.exists(path)) {
     log_msg("  [cache hit] ", key, " (", path, ")")
@@ -848,3 +858,6 @@ if (DEBUG) log_msg("  [debug] Re-run without --debug for full dataset.")
 # Final elapsed
 log_msg(sprintf("  → done in %.1fs",
   as.numeric(Sys.time() - get("t0", envir = environment(step)), units = "secs")))
+
+log_msg("Log closed.")
+close(log_con)

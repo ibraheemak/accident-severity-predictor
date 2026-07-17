@@ -3,14 +3,25 @@
 This document summarizes the data acquisition and feature-extraction pipeline
 built for the accident severity predictor project.
 
-> **Revision note (July 2026):** the pipeline now samples years **2016–2025**
-> with per-year caps **2,800 Serious / 5,600 Slight** (Fatal uncapped),
-> yielding **89,791 collisions (15.8% Fatal)** — chosen deliberately to nearly
-> double the Fatal class share vs. the original 2020–2024 run (9.1%), which
-> was the project's main accuracy bottleneck. Row counts and NA percentages
-> quoted in sections 2–8 below are from the original 82k-row run and are
-> indicative only; the structure of each step is unchanged. Sections 9–13
-> reflect the current run.
+> **Revision note (17 July 2026 — 4.6× scale-up):** per-year caps are now
+> **25,000 Serious (i.e. all available) / 22,400 Slight** (Fatal uncapped),
+> yielding **415,550 collisions (3.4% Fatal / 48.1% Serious / 48.5% Slight)**
+> vs the previous run's 89,791 (15.8% / 28.1% / 56.1%). Two consequences:
+> (1) the Severe (Fatal+Serious) class is now 94% Serious, so the binary
+> Slight-vs-Severe task is *harder* — macro F1 / AUC numbers from before this
+> revision (0.69–0.70 / ~0.774) are **not comparable** to numbers after it
+> (0.66–0.67 / ~0.734); (2) the sample's Serious:Fatal ratio (~14:1) now
+> nearly matches the real population (~13:1), where the old sample's 1.8:1
+> heavily over-represented easy Fatal cases. Splits were regenerated
+> (section 11) but the **masked expansion (section 13) was not** — it still
+> reflects the old 90k sample. Row counts and NA percentages in sections 2–8
+> are from older runs and indicative only; each step's structure is unchanged.
+>
+> **Revision note (July 2026):** the pipeline previously sampled years
+> **2016–2025** with per-year caps **2,800 Serious / 5,600 Slight** (Fatal
+> uncapped), yielding **89,791 collisions (15.8% Fatal)** — chosen
+> deliberately to nearly double the Fatal class share vs. the original
+> 2020–2024 run (9.1%), which was the project's main accuracy bottleneck.
 
 ---
 
@@ -21,15 +32,15 @@ Downloads UK STATS19 road safety data via the official `stats19` R package.
 ### Config
 ```r
 YEARS       <- 2016:2025
-SERIOUS_CAP <- 2800   # per year
-SLIGHT_CAP  <- 5600   # per year
+SERIOUS_CAP <- 25000  # per year — above the ~21–24k available, keeps ALL Serious
+SLIGHT_CAP  <- 22400  # per year
 RANDOM_SEED <- 42
 ```
 
-Fatal is never capped, so extending the year range grows the Fatal class
-"for free" while the shrunken Serious/Slight caps keep their 9-year totals
-near the original 5-year totals — net effect: Fatal share 9.1% → 15.8%
-without ballooning the dataset (82,491 → 89,791 rows).
+Fatal is never capped. Since the 17 July 2026 scale-up the Serious cap is
+effectively uncapped too (every year has fewer than 25,000 Serious rows), and
+the Slight cap is sized so Slight ≈ Severe overall — 415,550 rows total,
+~52% Severe, with a near-natural Serious:Fatal ratio (~14:1).
 
 ### What it does
 1. For each year, downloads three tables: **collisions**, **casualties**, **vehicles**
@@ -570,9 +581,11 @@ overall.
 ### Output: `data/splits/{train,valid,test}.csv`
 | Split | Rows | % of total |
 |---|---|---|
-| train | 62,828 | 70.0% |
-| valid | 13,458 | 15.0% |
-| test  | 13,493 | 15.0% |
+| train | 290,822 | 70.0% |
+| valid | 62,310 | 15.0% |
+| test  | 62,348 | 15.0% |
+
+(Pre-scale-up: 62,828 / 13,458 / 13,493.)
 
 Per-year counts are balanced within ~0.1 pp of the target split fractions in
 every year (2016–2024); full breakdown in `data/splits/split_stats.txt`
@@ -732,6 +745,13 @@ Each original row therefore becomes 11 rows (1 unmasked + 10 masked), all
 columns preserved, seed 42 for reproducibility.
 
 ### Output: `data/splits/masked/{train,valid,test}_masked.csv`
+
+> **STALE since the 17 July 2026 scale-up:** this step was deliberately
+> skipped when the 415k-collision splits were regenerated (it would produce a
+> ~4.6M-row expansion). The masked files on disk still reflect the old 90k
+> sample below and are inconsistent with `data/splits/{,normalized/}`.
+> Re-run `generate_masked_splits.R` before using the masked variant.
+
 | Split | Original rows | Expanded rows |
 |---|---|---|
 | train | 62,828 | 691,108 |

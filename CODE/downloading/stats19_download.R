@@ -7,8 +7,8 @@ RANDOM_SEED   <- 42
 #   - Fatal   : keep ALL rows (no cap)
 #   - Serious : up to SERIOUS_CAP rows
 #   - Slight  : up to SLIGHT_CAP rows
-SERIOUS_CAP <- 2800L
-SLIGHT_CAP  <- 5600L
+SERIOUS_CAP <- 25000L   # above the ~21-24k available/year -> keeps ALL Serious
+SLIGHT_CAP  <- 22400L   # 4x the previous 5600; ~52% Severe overall for the binary task
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Package setup ─────────────────────────────────────────────────────────────

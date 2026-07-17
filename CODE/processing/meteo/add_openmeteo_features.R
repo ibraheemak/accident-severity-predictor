@@ -98,10 +98,11 @@ step <- local({
   }
 })
 
-on.exit({
-  log_msg("Log closed.")
-  close(log_con)
-}, add = TRUE)
+# NOTE: no top-level on.exit() here — when this script is source()d (e.g. by
+# run_pipeline.R), a top-level on.exit fires as soon as its own expression
+# finishes evaluating, closing log_con and crashing the next log_msg call.
+# The log is closed explicitly at the end of the script instead; on error the
+# process/session teardown reclaims the connection.
 
 log_msg(if (DEBUG) "=== DEBUG RUN (n=50) ===" else "=== FULL RUN ===")
 log_msg("Endpoint:  ", OPENMETEO_BASE_URL, if (nzchar(OPENMETEO_API_KEY)) " (API key set)" else " (free tier)")
@@ -232,7 +233,14 @@ for (di in seq_along(dates)) {
   for (bi in seq_len(n_batches)) {
     idx       <- ((bi - 1L) * MAX_BATCH_SIZE + 1L):min(bi * MAX_BATCH_SIZE, nrow(day_rows))
     batch     <- day_rows[idx, ]
-    cache_key <- paste0(date_str, "_b", bi)
+    # Key includes batch size + coordinate checksums: cached responses are
+    # matched back to batch rows by position, so an entry must never be
+    # served to a batch with different membership (e.g. after re-sampling
+    # the STATS19 download) — that would silently attach wrong-location
+    # weather. With these components in the key, a changed sample is a
+    # clean cache miss instead of corruption.
+    cache_key <- sprintf("%s_b%d_n%d_%.4f_%.4f", date_str, bi,
+                         nrow(batch), sum(batch$latitude), sum(batch$longitude))
 
     # A 429 is a transient global throttle, not a real data error — retrying
     # the same batch after a long cooldown almost always succeeds. Only a
@@ -341,3 +349,6 @@ write_csv(output, OUTPUT_FILE)
 log_msg(sprintf("  Written: %s", OUTPUT_FILE))
 log_msg(sprintf("  Done. %d rows x %d columns.", nrow(output), ncol(output)))
 if (DEBUG) log_msg("  [debug] Re-run without --debug for full dataset.")
+
+log_msg("Log closed.")
+close(log_con)
