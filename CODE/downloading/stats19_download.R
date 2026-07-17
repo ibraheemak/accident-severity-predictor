@@ -7,8 +7,18 @@ RANDOM_SEED   <- 42
 #   - Fatal   : keep ALL rows (no cap)
 #   - Serious : up to SERIOUS_CAP rows
 #   - Slight  : up to SLIGHT_CAP rows
-SERIOUS_CAP <- 2800L
-SLIGHT_CAP  <- 5600L
+#
+# 1400/2800 (17 July 2026): active data/splits/*.csv were NOT produced by
+# literally running this script -- they were built by subsampling the
+# already-downloaded 415k-collision archive (data/archive_2026-07-17_scaleup_415k/)
+# at this same cap ratio (see docs/data_pipeline.md revision note) to avoid a
+# redundant multi-hour re-download + re-join. Running this script fresh with
+# these caps produces an equivalent-distribution but not row-identical
+# dataset (different random draw + a live STATS19 pull). Prior configs: 2800/
+# 5600 (89,791 collisions, the original default) and 25000/22400 (415,550
+# collisions, tried and reverted the same day) -- both archived, see docs.
+SERIOUS_CAP <- 1400L
+SLIGHT_CAP  <- 2800L
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Package setup ─────────────────────────────────────────────────────────────

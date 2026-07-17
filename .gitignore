@@ -9,10 +9,9 @@ data/splits/normalized/test_norm.csv
 .Renviron
 .venv/
 models/
-# 2026-07-17: the 415,550-collision scale-up experiment (all its pipeline
-# outputs, models, and raw download) was reverted back to the original
-# ~89,791-collision dataset -- see data/archive_2026-07-17_scaleup_415k/ and
-# models/archive_2026-07-17_scaleup_415k/ for the archived 415k-scale state,
-# kept on disk (not committed -- ~1.9 GB) for reference / possible reuse.
-data/archive_2026-07-17_scaleup_415k/
+# 2026-07-17: dataset-config experiments (see CLAUDE.md's "dataset-difficulty
+# history" note). Each superseded config's full data/models is kept on disk
+# under one of these archive_* directories (not committed -- several GB
+# total) for reference / possible reuse, rather than deleted.
+data/archive_*/
 models/archive_*/

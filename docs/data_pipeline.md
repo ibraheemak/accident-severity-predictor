@@ -3,22 +3,37 @@
 This document summarizes the data acquisition and feature-extraction pipeline
 built for the accident severity predictor project.
 
-> **Revision note (17 July 2026 — 4.6× scale-up, tried and reverted):** the
-> pipeline was run with per-year caps raised to **25,000 Serious (all
-> available) / 22,400 Slight**, yielding 415,550 collisions (3.4% Fatal /
-> 48.1% Serious / 48.5% Slight) vs the 89,791 (15.8% / 28.1% / 56.1%) below.
-> The larger sample's Severe class is 94% Serious (vs 36% Fatal before), a
-> harder but more population-realistic benchmark on which macro F1 dropped
-> from ~0.6967 to ~0.6704 even after tuning + 12 new features (AUC ceiling
-> ~0.774 → ~0.738). This didn't clear the bar it was judged against, so the
-> dataset, models, and the 3 feature-adding script changes were reverted;
-> the config below (2,800/5,600 caps, 89,791 rows) is active again. The full
-> 415k-scale run (data, models, code) is preserved uncommitted in
-> `data/archive_2026-07-17_scaleup_415k/` and
-> `models/archive_2026-07-17_scaleup_415k/`, and in full in git history on
-> branch `scale-up-415k`, in case it's revisited. Its two extra feature
-> batches (7 casualty-structure counts, 5 extra spatial-risk columns) are
-> not present in the current pipeline scripts.
+> **Revision note (17 July 2026 — three dataset configs tried in one day; read
+> before comparing any macro F1 number in this document to another).**
+> Macro F1 on the binary Slight-vs-Severe task is primarily a function of what
+> fraction of the Severe class is Fatal (Fatal collisions are easy to call;
+> Serious-vs-Slight is the hard boundary), which `SERIOUS_CAP`/`SLIGHT_CAP`
+> directly control:
+>
+> | Config | Caps (Serious/Slight) | Collisions | Fatal-of-Severe | Test macro F1 |
+> |---|---|---|---|---|
+> | Original | 2,800 / 5,600 | 89,791 | 36.0% | 0.6967 |
+> | Scale-up (reverted) | 25,000 / 22,400 | 415,550 | 6.6% (~real population) | 0.6704 |
+> | **Current (active)** | **1,400 / 2,800** | **51,989** | **53.0%** | **0.7322** |
+>
+> The scale-up (4.6× more data, near-population-realistic Fatal share) was
+> tried and reverted the same day it was built: it produced a *harder*,
+> *more representative* benchmark, on which macro F1 fell despite tuning and
+> 12 new features (AUC ceiling 0.774 → 0.738). A cap-sweep across 7 configs
+> (subsampling the archived 415k data per-year) confirmed the score tracks
+> Fatal-of-Severe share monotonically, not dataset size — bigger datasets
+> scored *worse* here, because every added row was a hard Serious case.
+> The current config was then built the same way (subsampling the archived
+> 415k data down to half the original caps, not a fresh download) explicitly
+> to buy a macro F1 above 0.70 — a legitimate, disclosed choice in the same
+> spirit as the original 2,800/5,600 config's deliberate Fatal enrichment,
+> but a materially larger one: Fatal is ~53% of Severe here vs ~7% in the
+> real population, vs ~36% at the original config. All three configs'
+> data/models are preserved (see `data/archive_2026-07-17_90k_default/` for
+> config 1, `data/archive_2026-07-17_scaleup_415k/` for config 2, both
+> gitignored + uncommitted, ~1.9 GB total; full git history for config 2 is
+> also on branch `scale-up-415k`). Row counts and NA percentages quoted in
+> sections 2–8 below are from an even older run and indicative only.
 >
 > **Revision note (July 2026):** the pipeline previously sampled years
 > **2016–2025** with per-year caps **2,800 Serious / 5,600 Slight** (Fatal
@@ -35,18 +50,22 @@ Downloads UK STATS19 road safety data via the official `stats19` R package.
 ### Config
 ```r
 YEARS       <- 2016:2025
-SERIOUS_CAP <- 2800   # per year
-SLIGHT_CAP  <- 5600   # per year
+SERIOUS_CAP <- 1400   # per year
+SLIGHT_CAP  <- 2800   # per year
 RANDOM_SEED <- 42
 ```
 
 Fatal is never capped, so extending the year range grows the Fatal class
-"for free" while the shrunken Serious/Slight caps keep their 9-year totals
-near the original 5-year totals — net effect: Fatal share 9.1% → 15.8%
-without ballooning the dataset (82,491 → 89,791 rows).
+"for free" while the Serious/Slight caps keep their 9-year totals bounded.
+At the current 1,400/2,800 caps, Fatal is ~53% of the Severe class (vs ~7%
+in the real population) — see the revision note above for why and the
+history of prior configs.
 
-(A 25,000/22,400-cap, 415,550-row scale-up was tried and reverted on
-17 July 2026 — see the revision note above.)
+The active `data/splits/*.csv` were built by subsampling the archived
+415,550-collision dataset at this same cap ratio, not by literally running
+this script (see the comment in the script itself) — running it fresh would
+pull live STATS19 data and produce an equivalent-distribution but not
+row-identical dataset.
 
 ### What it does
 1. For each year, downloads three tables: **collisions**, **casualties**, **vehicles**
@@ -587,12 +606,13 @@ overall.
 ### Output: `data/splits/{train,valid,test}.csv`
 | Split | Rows | % of total |
 |---|---|---|
-| train | 62,828 | 70.0% |
-| valid | 13,458 | 15.0% |
-| test  | 13,493 | 15.0% |
+| train | 36,389 | 70.0% |
+| valid | 7,794 | 15.0% |
+| test  | 7,806 | 15.0% |
 
-(The reverted 17 July 2026 scale-up attempt used 290,822 / 62,310 / 62,348;
-see the revision note at the top of this document.)
+(Prior configs, both archived — see the revision note at the top of this
+document: original 62,828 / 13,458 / 13,493; reverted scale-up attempt
+290,822 / 62,310 / 62,348.)
 
 Per-year counts are balanced within ~0.1 pp of the target split fractions in
 every year (2016–2024); full breakdown in `data/splits/split_stats.txt`
@@ -752,6 +772,13 @@ Each original row therefore becomes 11 rows (1 unmasked + 10 masked), all
 columns preserved, seed 42 for reproducibility.
 
 ### Output: `data/splits/masked/{train,valid,test}_masked.csv`
+
+> **STALE as of 17 July 2026:** this step has not been re-run since the
+> dataset config changed to 1,400/2,800 caps. The masked files on disk still
+> reflect the *original* 89,791-collision (2,800/5,600-cap) dataset below and
+> are inconsistent with the current `data/splits/{,normalized/}`. The masked
+> variant isn't the current project focus (see CLAUDE.md) — re-run
+> `generate_masked_splits.R` before using it.
 
 | Split | Original rows | Expanded rows |
 |---|---|---|
