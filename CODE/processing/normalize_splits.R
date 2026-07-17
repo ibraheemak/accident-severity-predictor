@@ -30,8 +30,12 @@ ZSCORE_COLS <- c(
   "snowfall_cm", "snow_depth_m",
   "hist_acc_rate_500m", "hist_severe_frac_500m", "hist_fatal_rate_500m",
   "dist_to_nearest_hist_acc_m",
+  "hist_acc_rate_250m", "hist_severe_frac_250m",
+  "hist_acc_rate_1500m", "hist_severe_frac_1500m", "dist_to_nearest_severe_m",
   "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
-  "oldest_casualty_age"
+  "oldest_casualty_age",
+  "n_driver_cas", "n_passenger_cas", "n_child_cas", "n_elderly_cas",
+  "n_motorcyclist_cas", "n_cyclist_cas", "n_female_cas"
 )
 
 # Nominal/unordered category codes: left as raw integers (NaNs preserved for

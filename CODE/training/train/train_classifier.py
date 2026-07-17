@@ -87,13 +87,20 @@ BASE_COLS = [
     # Spatial risk-density features (add_risk_density_features.R): derived
     # purely from lat/lon against prior-year accident history, so they're
     # free at 999-call time -- base features, not an acquirable source.
+    # 250m/1500m radii + nearest-severe distance added 2026-07-17.
     "hist_acc_rate_500m", "hist_severe_frac_500m", "hist_fatal_rate_500m",
     "dist_to_nearest_hist_acc_m",
+    "hist_acc_rate_250m", "hist_severe_frac_250m",
+    "hist_acc_rate_1500m", "hist_severe_frac_1500m", "dist_to_nearest_severe_m",
     # Dispatch-time casualty facts (build_realtime_casualty_features.R):
     # what a 999 caller reports -- how many hurt, pedestrian involvement,
-    # rough ages. Recorded injury severity is deliberately excluded.
+    # rough ages, and who the hurt are (driver/passenger/child/elderly/
+    # motorcyclist/cyclist/female counts, added 2026-07-17). Recorded injury
+    # severity is deliberately excluded.
     "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
     "oldest_casualty_age",
+    "n_driver_cas", "n_passenger_cas", "n_child_cas", "n_elderly_cas",
+    "n_motorcyclist_cas", "n_cyclist_cas", "n_female_cas",
 ]
 
 # Nominal/unordered category codes (mirrors NOMINAL_COLS in

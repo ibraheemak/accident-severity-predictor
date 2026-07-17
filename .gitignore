@@ -15,3 +15,8 @@ models/
 data/raw/stats19/stats19_20260716_175811/labels/
 # obsolete pre-scale-up Open-Meteo cache (positional keys, 90k sample only)
 data/raw/openmeteo/cache_89k_sample_archived/
+# 2026-07-17 feature round: these two stage tables crossed GitHub's 100 MB
+# file limit (113/129 MB). They are deterministic outputs of pipeline steps
+# 9-10 over tracked inputs -- regenerate with those steps if needed.
+data/features/stats19+aadf+osm+meteo+risk/stats19+aadf+osm+meteo+risk_combined_realtime_features.csv
+data/features/stats19+aadf+osm+meteo+risk+cas/stats19+aadf+osm+meteo+risk+cas_combined_realtime_features.csv
