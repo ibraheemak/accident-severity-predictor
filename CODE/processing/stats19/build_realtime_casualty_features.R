@@ -9,20 +9,6 @@
 #   n_pedestrian_casualties  casualties with casualty_class == 3 (pedestrian)
 #   youngest_casualty_age    min age_of_casualty (NA if none recorded)
 #   oldest_casualty_age      max age_of_casualty (NA if none recorded)
-#   n_driver_cas             casualties with casualty_class == 1 (driver/rider)
-#   n_passenger_cas          casualties with casualty_class == 2 (passenger)
-#   n_child_cas              casualties aged 0-15
-#   n_elderly_cas            casualties aged 70+
-#   n_motorcyclist_cas       casualty_type in {2,3,4,5,23,97} (motorcyclist)
-#   n_cyclist_cas            casualty_type == 1 (pedal cyclist)
-#   n_female_cas             sex_of_casualty == 2
-#
-# (The 7 count features after oldest_casualty_age were added 2026-07-17: a
-# 999 caller describes who is hurt -- "the motorcyclist", "a child", "my
-# wife" -- so the class/age-band/type structure of the casualty list is
-# dispatch-time information just like the original four aggregates.
-# Measured on the binary normalized model: +0.002 valid macro F1 alone,
-# the largest single contribution of the 2026-07-17 feature round.)
 #
 # Explicitly EXCLUDED (label-adjacent / post-hoc / officer-assessed):
 # casualty_severity, enhanced_casualty_severity, casualty_adjusted_*,
@@ -53,16 +39,12 @@ COMBINED_OUT <- file.path(COMBINED_DIR, "stats19+aadf+osm+meteo+risk+cas_combine
 
 # --- 1. aggregate casualties -> one row per collision --------------------------
 cas <- read_csv(INPUT_CASUALTY_CSV, show_col_types = FALSE,
-                col_select = c(collision_index, casualty_class, age_of_casualty,
-                               sex_of_casualty, casualty_type))
+                col_select = c(collision_index, casualty_class, age_of_casualty))
 cat(sprintf("Loaded %d casualty rows (%d collisions) from %s\n",
             nrow(cas), n_distinct(cas$collision_index), INPUT_CASUALTY_CSV))
 
 # Negative age codes mean "not recorded" in some spec years -- treat as NA.
 cas$age_of_casualty[!is.na(cas$age_of_casualty) & cas$age_of_casualty < 0] <- NA_real_
-
-# vehicle_type groupings mirror build_realtime_vehicle_features.R
-MOTORCYCLE_CAS_TYPES <- c(2, 3, 4, 5, 23, 97)
 
 agg <- cas |>
   group_by(collision_index) |>
@@ -73,13 +55,6 @@ agg <- cas |>
                                      min(age_of_casualty, na.rm = TRUE)),
     oldest_casualty_age     = ifelse(all(is.na(age_of_casualty)), NA_real_,
                                      max(age_of_casualty, na.rm = TRUE)),
-    n_driver_cas            = sum(casualty_class == 1, na.rm = TRUE),
-    n_passenger_cas         = sum(casualty_class == 2, na.rm = TRUE),
-    n_child_cas             = sum(!is.na(age_of_casualty) & age_of_casualty < 16),
-    n_elderly_cas           = sum(!is.na(age_of_casualty) & age_of_casualty >= 70),
-    n_motorcyclist_cas      = sum(casualty_type %in% MOTORCYCLE_CAS_TYPES, na.rm = TRUE),
-    n_cyclist_cas           = sum(casualty_type == 1, na.rm = TRUE),
-    n_female_cas            = sum(sex_of_casualty == 2, na.rm = TRUE),
     .groups = "drop"
   )
 

@@ -43,8 +43,6 @@ ACQUIRABLE_COLS <- c(
   "has_bus_coach", "has_towing",
   # Casualty facts a 999 caller reports -- ask-the-dispatcher fields, so
   # maskable like the vehicle-type flags (build_realtime_casualty_features.R).
-  "n_driver_cas", "n_passenger_cas", "n_child_cas", "n_elderly_cas",
-  "n_motorcyclist_cas", "n_cyclist_cas", "n_female_cas",
   "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
   "oldest_casualty_age"
 )

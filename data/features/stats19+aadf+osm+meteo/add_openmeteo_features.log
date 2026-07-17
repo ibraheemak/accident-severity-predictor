@@ -1,62 +1,61 @@
-[2026-07-17 08:03:46] === FULL RUN ===
-[2026-07-17 08:03:46] Endpoint:  https://customer-archive-api.open-meteo.com/v1/archive (API key set)
-[2026-07-17 08:03:46] Output:    data/features/stats19+aadf+osm+meteo/stats19+aadf+osm+meteo_combined_realtime_features.csv
-[2026-07-17 08:03:46] Cache dir: data/raw/openmeteo/cache
-[2026-07-17 08:03:46] Log file:  data/features/stats19+aadf+osm+meteo/add_openmeteo_features.log
-[2026-07-17 08:03:46] == 1. Load input ==
-[2026-07-17 08:03:47]   Loaded 415550 rows x 39 cols from data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv
-[2026-07-17 08:03:47]   -> done in 0.6s
-[2026-07-17 08:03:47] == 2. Parse date/time ==
-[2026-07-17 08:03:48]   415480/415550 rows have valid lat/lon/date/time (70 missing)
-[2026-07-17 08:03:48]   -> done in 1.4s
-[2026-07-17 08:03:48] == 4. Batch accidents by date and call Open-Meteo ==
-[2026-07-17 08:03:48]   3288 distinct dates across 415480 joinable rows
-[2026-07-17 08:09:52]   date 100/3288 (2016-04-09) — 114 accidents
-[2026-07-17 08:16:14]   date 200/3288 (2016-07-18) — 145 accidents
-[2026-07-17 08:22:41]   date 300/3288 (2016-10-26) — 130 accidents
-[2026-07-17 08:29:06]   date 400/3288 (2017-02-03) — 157 accidents
-[2026-07-17 08:35:18]   date 500/3288 (2017-05-14) — 126 accidents
-[2026-07-17 08:44:46]   date 600/3288 (2017-08-22) — 109 accidents
-[2026-07-17 08:51:25]   date 700/3288 (2017-11-30) — 143 accidents
-[2026-07-17 08:57:07]   date 800/3288 (2018-03-10) — 111 accidents
-[2026-07-17 09:03:41]   date 900/3288 (2018-06-18) — 143 accidents
-[2026-07-17 09:10:16]   date 1000/3288 (2018-09-26) — 161 accidents
-[2026-07-17 09:16:39]   date 1100/3288 (2019-01-04) — 84 accidents
-[2026-07-17 09:23:09]   date 1200/3288 (2019-04-14) — 76 accidents
-[2026-07-17 09:29:40]   date 1300/3288 (2019-07-23) — 158 accidents
-[2026-07-17 09:37:35]   date 1400/3288 (2019-10-31) — 146 accidents
-[2026-07-17 09:44:37]   date 1500/3288 (2020-02-08) — 138 accidents
-[2026-07-17 09:49:31]   date 1600/3288 (2020-05-18) — 84 accidents
-[2026-07-17 09:55:27]   date 1700/3288 (2020-08-26) — 128 accidents
-[2026-07-17 10:01:53]   date 1800/3288 (2020-12-04) — 161 accidents
-[2026-07-17 10:06:22]   date 1900/3288 (2021-03-14) — 67 accidents
-[2026-07-17 10:12:29]   date 2000/3288 (2021-06-22) — 134 accidents
-[2026-07-17 10:20:08]   date 2100/3288 (2021-09-30) — 131 accidents
-[2026-07-17 10:26:20]   date 2200/3288 (2022-01-08) — 88 accidents
-[2026-07-17 10:32:35]   date 2300/3288 (2022-04-18) — 114 accidents
-[2026-07-17 10:39:09]   date 2400/3288 (2022-07-27) — 116 accidents
-[2026-07-17 10:45:42]   date 2500/3288 (2022-11-04) — 213 accidents
-[2026-07-17 10:51:41]   date 2600/3288 (2023-02-12) — 81 accidents
-[2026-07-17 10:58:28]   date 2700/3288 (2023-05-23) — 120 accidents
-[2026-07-17 11:11:27]   date 2800/3288 (2023-08-31) — 124 accidents
-[2026-07-17 11:17:59]   date 2900/3288 (2023-12-09) — 133 accidents
-[2026-07-17 11:23:58]   date 3000/3288 (2024-03-18) — 107 accidents
-[2026-07-17 11:30:26]   date 3100/3288 (2024-06-26) — 178 accidents
-[2026-07-17 11:37:05]   date 3200/3288 (2024-10-04) — 155 accidents
-[2026-07-17 11:42:31]   date 3288/3288 (2024-12-31) — 90 accidents
-[2026-07-17 11:42:36]   Collected weather for 415480/415480 joinable rows
-[2026-07-17 11:42:36]   -> done in 13127.7s
-[2026-07-17 11:42:36] == 5. Assemble output ==
-[2026-07-17 11:42:36]   Output table: 415550 rows x 45 cols
-[2026-07-17 11:42:36]   -- Open-Meteo feature statistics (n = 415550) --
-[2026-07-17 11:42:36]   temperature_2m_c       filled=415480/415550 (100.0%)  min=-9.20  median=11.60  max=38.00
-[2026-07-17 11:42:36]   precipitation_mm       filled=415480/415550 (100.0%)  min=0.00  median=0.00  max=17.20
-[2026-07-17 11:42:36]   wind_speed_10m_kmh     filled=415480/415550 (100.0%)  min=0.00  median=15.10  max=66.60
-[2026-07-17 11:42:36]   weather_code           filled=415480/415550 (100.0%)  min=0.00  median=3.00  max=75.00
-[2026-07-17 11:42:36]   snowfall_cm            filled=415480/415550 (100.0%)  min=0.00  median=0.00  max=3.57
-[2026-07-17 11:42:36]   snow_depth_m           filled=415341/415550 (99.9%)  min=0.00  median=0.00  max=0.65
-[2026-07-17 11:42:36]   -> done in 0.3s
-[2026-07-17 11:42:36] == 7. Write output ==
-[2026-07-17 11:42:37]   Written: data/features/stats19+aadf+osm+meteo/stats19+aadf+osm+meteo_combined_realtime_features.csv
-[2026-07-17 11:42:37]   Done. 415550 rows x 45 columns.
-[2026-07-17 11:42:37] Log closed.
+[2026-07-06 22:35:08] === FULL RUN ===
+[2026-07-06 22:35:08] Endpoint:  https://customer-archive-api.open-meteo.com/v1/archive (API key set)
+[2026-07-06 22:35:08] Output:    data/features/stats19+aadf+osm+meteo/stats19+aadf+osm+meteo_combined_realtime_features.csv
+[2026-07-06 22:35:08] Cache dir: data/raw/openmeteo_cache
+[2026-07-06 22:35:08] Log file:  data/features/stats19+aadf+osm+meteo/add_openmeteo_features.log
+[2026-07-06 22:35:08] == 1. Load input ==
+[2026-07-06 22:35:09]   Loaded 89791 rows x 47 cols from data/features/stats19+aadf+osm/stats19+aadf+osm_combined_realtime_features.csv
+[2026-07-06 22:35:09]   -> done in 0.2s
+[2026-07-06 22:35:09] == 2. Parse date/time ==
+[2026-07-06 22:35:09]   89779/89791 rows have valid lat/lon/date/time (12 missing)
+[2026-07-06 22:35:09]   -> done in 0.3s
+[2026-07-06 22:35:09] == 4. Batch accidents by date and call Open-Meteo ==
+[2026-07-06 22:35:09]   3288 distinct dates across 89779 joinable rows
+[2026-07-06 22:38:26]   date 100/3288 (2016-04-09) — 25 accidents
+[2026-07-06 22:41:46]   date 200/3288 (2016-07-18) — 29 accidents
+[2026-07-06 22:45:06]   date 300/3288 (2016-10-26) — 22 accidents
+[2026-07-06 22:48:27]   date 400/3288 (2017-02-03) — 41 accidents
+[2026-07-06 22:51:48]   date 500/3288 (2017-05-14) — 32 accidents
+[2026-07-06 22:55:08]   date 600/3288 (2017-08-22) — 21 accidents
+[2026-07-06 22:58:29]   date 700/3288 (2017-11-30) — 29 accidents
+[2026-07-06 23:01:49]   date 800/3288 (2018-03-10) — 21 accidents
+[2026-07-06 23:05:10]   date 900/3288 (2018-06-18) — 34 accidents
+[2026-07-06 23:08:30]   date 1000/3288 (2018-09-26) — 25 accidents
+[2026-07-06 23:11:51]   date 1100/3288 (2019-01-04) — 12 accidents
+[2026-07-06 23:15:10]   date 1200/3288 (2019-04-14) — 19 accidents
+[2026-07-06 23:18:31]   date 1300/3288 (2019-07-23) — 23 accidents
+[2026-07-06 23:21:51]   date 1400/3288 (2019-10-31) — 30 accidents
+[2026-07-06 23:25:12]   date 1500/3288 (2020-02-08) — 28 accidents
+[2026-07-06 23:28:32]   date 1600/3288 (2020-05-18) — 19 accidents
+[2026-07-06 23:31:52]   date 1700/3288 (2020-08-26) — 17 accidents
+[2026-07-06 23:35:13]   date 1800/3288 (2020-12-04) — 45 accidents
+[2026-07-06 23:38:33]   date 1900/3288 (2021-03-14) — 13 accidents
+[2026-07-06 23:41:54]   date 2000/3288 (2021-06-22) — 28 accidents
+[2026-07-06 23:45:14]   date 2100/3288 (2021-09-30) — 29 accidents
+[2026-07-06 23:48:35]   date 2200/3288 (2022-01-08) — 20 accidents
+[2026-07-06 23:51:55]   date 2300/3288 (2022-04-18) — 18 accidents
+[2026-07-06 23:55:15]   date 2400/3288 (2022-07-27) — 19 accidents
+[2026-07-06 23:58:35]   date 2500/3288 (2022-11-04) — 54 accidents
+[2026-07-07 00:01:56]   date 2600/3288 (2023-02-12) — 22 accidents
+[2026-07-07 00:05:16]   date 2700/3288 (2023-05-23) — 26 accidents
+[2026-07-07 00:08:37]   date 2800/3288 (2023-08-31) — 20 accidents
+[2026-07-07 00:11:57]   date 2900/3288 (2023-12-09) — 30 accidents
+[2026-07-07 00:15:18]   date 3000/3288 (2024-03-18) — 25 accidents
+[2026-07-07 00:18:38]   date 3100/3288 (2024-06-26) — 39 accidents
+[2026-07-07 00:21:58]   date 3200/3288 (2024-10-04) — 29 accidents
+[2026-07-07 00:24:55]   date 3288/3288 (2024-12-31) — 20 accidents
+[2026-07-07 00:24:57]   Collected weather for 89779/89779 joinable rows
+[2026-07-07 00:24:57]   -> done in 6587.8s
+[2026-07-07 00:24:57] == 5. Assemble output ==
+[2026-07-07 00:24:57]   Output table: 89791 rows x 53 cols
+[2026-07-07 00:24:57]   -- Open-Meteo feature statistics (n = 89791) --
+[2026-07-07 00:24:57]   temperature_2m_c       filled=89779/89791 (100.0%)  min=-8.90  median=11.50  max=37.80
+[2026-07-07 00:24:57]   precipitation_mm       filled=89779/89791 (100.0%)  min=0.00  median=0.00  max=11.20
+[2026-07-07 00:24:57]   wind_speed_10m_kmh     filled=89779/89791 (100.0%)  min=0.00  median=15.10  max=66.30
+[2026-07-07 00:24:57]   weather_code           filled=89779/89791 (100.0%)  min=0.00  median=3.00  max=75.00
+[2026-07-07 00:24:57]   snowfall_cm            filled=89779/89791 (100.0%)  min=0.00  median=0.00  max=2.45
+[2026-07-07 00:24:57]   snow_depth_m           filled=89758/89791 (100.0%)  min=0.00  median=0.00  max=0.30
+[2026-07-07 00:24:57]   -> done in 0.0s
+[2026-07-07 00:24:57] == 7. Write output ==
+[2026-07-07 00:24:57]   Written: data/features/stats19+aadf+osm+meteo/stats19+aadf+osm+meteo_combined_realtime_features.csv
+[2026-07-07 00:24:57]   Done. 89791 rows x 53 columns.

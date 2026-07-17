@@ -87,20 +87,13 @@ BASE_COLS = [
     # Spatial risk-density features (add_risk_density_features.R): derived
     # purely from lat/lon against prior-year accident history, so they're
     # free at 999-call time -- base features, not an acquirable source.
-    # 250m/1500m radii + nearest-severe distance added 2026-07-17.
     "hist_acc_rate_500m", "hist_severe_frac_500m", "hist_fatal_rate_500m",
     "dist_to_nearest_hist_acc_m",
-    "hist_acc_rate_250m", "hist_severe_frac_250m",
-    "hist_acc_rate_1500m", "hist_severe_frac_1500m", "dist_to_nearest_severe_m",
     # Dispatch-time casualty facts (build_realtime_casualty_features.R):
     # what a 999 caller reports -- how many hurt, pedestrian involvement,
-    # rough ages, and who the hurt are (driver/passenger/child/elderly/
-    # motorcyclist/cyclist/female counts, added 2026-07-17). Recorded injury
-    # severity is deliberately excluded.
+    # rough ages. Recorded injury severity is deliberately excluded.
     "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
     "oldest_casualty_age",
-    "n_driver_cas", "n_passenger_cas", "n_child_cas", "n_elderly_cas",
-    "n_motorcyclist_cas", "n_cyclist_cas", "n_female_cas",
 ]
 
 # Nominal/unordered category codes (mirrors NOMINAL_COLS in
@@ -243,7 +236,20 @@ def main():
     parser.add_argument("--binary", action="store_true",
                          help="Merge Fatal+Serious into one 'Severe' class and train a binary "
                               "Slight-vs-Severe classifier instead of the 3-class one.")
+    parser.add_argument("--train-frac", type=float, default=1.0,
+                         help="Use only this fraction of the training split (default 1.0 = all "
+                              "of it), sampled by collision group with --seed. valid/test are "
+                              "never subsampled, so this is a controlled way to trace out a "
+                              "learning curve or speed up iteration -- NOT a way to reproduce "
+                              "old pre-2026-07-17 scores: those were measured on a smaller AND "
+                              "differently-distributed benchmark (Severe was 36% Fatal, easier; "
+                              "now 94% Serious, harder). A 62,828-row --train-frac subsample of "
+                              "the current 290k train set scores ~0.663 test macro F1 on the "
+                              "current test set, not the ~0.697 the old model got on the old one.")
     args = parser.parse_args()
+
+    if not 0 < args.train_frac <= 1.0:
+        raise ValueError(f"--train-frac must be in (0, 1], got {args.train_frac}")
 
     eval_variant = args.eval_variant or args.data_variant
 
@@ -252,7 +258,17 @@ def main():
     print(f"Subset: {name}  data_variant={args.data_variant}  eval_variant={eval_variant}  "
           f"({len(cols)} feature columns)")
 
-    train_df = load_split("train", cols, args.data_variant)
+    train_load_cols = cols if args.train_frac == 1.0 else cols + ["collision_index"]
+    train_df = load_split("train", train_load_cols, args.data_variant)
+    if args.train_frac < 1.0:
+        groups = train_df["collision_index"].unique()
+        rng = np.random.RandomState(args.seed)
+        n_keep = max(1, round(len(groups) * args.train_frac))
+        keep = rng.choice(groups, size=n_keep, replace=False)
+        n_rows_before = len(train_df)
+        train_df = train_df[train_df["collision_index"].isin(keep)].reset_index(drop=True)
+        print(f"--train-frac {args.train_frac}: {len(keep)}/{len(groups)} collision groups "
+              f"-> {len(train_df)}/{n_rows_before} rows")
     valid_df = load_split("valid", cols, eval_variant)
     test_df = load_split("test", cols, eval_variant)
     print(f"Rows: train={len(train_df)}  valid={len(valid_df)}  test={len(test_df)}")
@@ -315,6 +331,8 @@ def main():
         file_stem += f"_evalon_{eval_variant}"
     if args.binary:
         file_stem += "_binary"
+    if args.train_frac < 1.0:
+        file_stem += f"_trainfrac{args.train_frac:g}"
 
     MODEL_DIR.mkdir(exist_ok=True)
     model_path = MODEL_DIR / f"classifier_{file_stem}.json"
@@ -325,6 +343,8 @@ def main():
         "data_variant": args.data_variant,
         "eval_variant": eval_variant,
         "binary": args.binary,
+        "train_frac": args.train_frac,
+        "n_train_rows": len(train_df),
         "feature_columns": cols,
         "categorical_columns": categorical_cols,
         "best_iteration": int(model.best_iteration),
