@@ -91,9 +91,14 @@ BASE_COLS = [
     "dist_to_nearest_hist_acc_m",
     # Dispatch-time casualty facts (build_realtime_casualty_features.R):
     # what a 999 caller reports -- how many hurt, pedestrian involvement,
-    # rough ages. Recorded injury severity is deliberately excluded.
+    # rough ages, and who the hurt are (driver/passenger/child/elderly/
+    # motorcyclist/cyclist/female counts, re-added 2026-07-19: worth +0.006
+    # test macro F1 on the 1400/2800-cap config). Recorded injury severity
+    # is deliberately excluded.
     "n_casualties", "n_pedestrian_casualties", "youngest_casualty_age",
     "oldest_casualty_age",
+    "n_driver_cas", "n_passenger_cas", "n_child_cas", "n_elderly_cas",
+    "n_motorcyclist_cas", "n_cyclist_cas", "n_female_cas",
 ]
 
 # Nominal/unordered category codes (mirrors NOMINAL_COLS in
