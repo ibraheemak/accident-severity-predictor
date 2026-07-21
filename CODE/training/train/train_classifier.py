@@ -358,8 +358,12 @@ def main():
             "seed": args.seed,
             **xgb_params,
         },
-        "valid": {"macro_f1": valid_metrics["macro_f1"]},
-        "test": {"macro_f1": test_metrics["macro_f1"]},
+        "valid": {"macro_f1": valid_metrics["macro_f1"],
+                  "accuracy": valid_metrics["accuracy"],
+                  "balanced_accuracy": valid_metrics["balanced_accuracy"]},
+        "test": {"macro_f1": test_metrics["macro_f1"],
+                 "accuracy": test_metrics["accuracy"],
+                 "balanced_accuracy": test_metrics["balanced_accuracy"]},
     }
     meta_path = MODEL_DIR / f"classifier_{file_stem}_metrics.json"
     with open(meta_path, "w") as f:
