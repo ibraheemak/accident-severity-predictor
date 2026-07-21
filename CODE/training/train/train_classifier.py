@@ -113,10 +113,17 @@ CATEGORICAL_COLS = [
 ]
 
 # Per-source feature columns, added only when that source is in --sources.
+# dist_to_speed_camera_m was dropped from "osm" (2026-07-21): 90.4% NaN (most
+# collisions aren't near a camera), near-zero feature importance, and an
+# external-source ablation on the 1400/2800-cap binary model found dropping it
+# a slight net positive (aadf+osm 0.7396 -> aadf+osm_dense 0.7398). The R
+# pipeline (add_osm_features.R) still computes the column; it is simply no
+# longer fed to the model. (has_speed_camera, the binary presence flag, is kept
+# -- it's the part of the camera signal that carries value.)
 SOURCE_COLS = {
     "aadf": ["aadf_traffic_volume", "aadf_distance_m",],
     "osm": [
-        "has_speed_camera", "dist_to_speed_camera_m", "has_traffic_calming",
+        "has_speed_camera", "has_traffic_calming",
         "has_traffic_signals", "lane_count", "has_median",
     ],
     "meteo": [
