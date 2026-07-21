@@ -20,8 +20,8 @@ them first with build_full_stats19_features.py --out-dir, or point --full-dir
 elsewhere). Run from repo root.
 
 Usage:
-    python CODE/experiments/full_stats19_upper_bound.py   # (builds nothing; see its docstring)
-    python CODE/experiments/tune_full_stats19_model.py --n-trials 80
+    python CODE/experiments/full_stats19/full_stats19_upper_bound.py   # (builds nothing; see its docstring)
+    python CODE/experiments/full_stats19/tune_full_stats19_model.py --n-trials 80
 """
 
 import argparse
@@ -38,7 +38,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import KFold
 from sklearn.utils.class_weight import compute_sample_weight
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training" / "train"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "training" / "train"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from train_classifier import CATEGORICAL_COLS, MODEL_DIR, TARGET_COL, feature_columns
 from build_full_stats19_features import CATEGORICAL_EXTRA

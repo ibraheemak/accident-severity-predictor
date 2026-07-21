@@ -33,7 +33,7 @@ import xgboost as xgb
 from sklearn.metrics import f1_score, roc_auc_score
 from sklearn.utils.class_weight import compute_sample_weight
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training" / "train"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "training" / "train"))
 from train_classifier import CATEGORICAL_COLS, TARGET_COL, feature_columns, unify_categorical_dtypes
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
