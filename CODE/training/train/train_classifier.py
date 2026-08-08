@@ -32,8 +32,8 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import (
-    accuracy_score, balanced_accuracy_score, classification_report,
-    confusion_matrix, f1_score,
+    accuracy_score, average_precision_score, balanced_accuracy_score,
+    classification_report, confusion_matrix, f1_score,
 )
 from sklearn.utils.class_weight import compute_sample_weight
 
@@ -202,14 +202,43 @@ def evaluate(model: xgb.XGBClassifier, X: pd.DataFrame, y: pd.Series, split: str
         y, y_pred, target_names=target_names, output_dict=True, zero_division=0,
     )
     cm = confusion_matrix(y, y_pred).tolist()
+    pr_auc = _pr_auc(model, X, y, target_names)
     if verbose:
         print(f"\n[{split}] macro F1 = {macro_f1:.4f}  accuracy = {accuracy:.4f}  "
               f"balanced accuracy = {balanced_accuracy:.4f}")
         print(classification_report(y, y_pred, target_names=target_names, zero_division=0))
         print(f"[{split}] confusion matrix (rows=true, cols=pred, order={'/'.join(target_names)}):\n{np.array(cm)}")
+        print(f"[{split}] PR-AUC (average precision, one-vs-rest):")
+        for name in target_names:
+            print(f"    {name:24s} {pr_auc['per_class'][name]:.4f}  "
+                  f"(baseline = prevalence {pr_auc['baseline'][name]:.4f})")
+        print(f"    {'macro':24s} {pr_auc['macro']:.4f}  "
+              f"(baseline {pr_auc['macro_baseline']:.4f})")
     return {"macro_f1": macro_f1, "accuracy": accuracy,
             "balanced_accuracy": balanced_accuracy, "report": report,
-            "confusion_matrix": cm}
+            "confusion_matrix": cm, "pr_auc": pr_auc}
+
+
+def _pr_auc(model, X: pd.DataFrame, y: pd.Series, target_names: list) -> dict:
+    """One-vs-rest average precision per class, plus the no-skill baseline.
+
+    The baseline for a PR curve is the positive-class prevalence, so it is
+    reported alongside every number -- on these severity-oversampled splits a
+    bare PR-AUC is not interpretable without it (see CLAUDE.md on class balance).
+    """
+    proba = model.predict_proba(X)
+    y = np.asarray(y)
+    per_class, baseline = {}, {}
+    for idx, name in enumerate(target_names):
+        y_bin = (y == idx).astype(int)
+        per_class[name] = float(average_precision_score(y_bin, proba[:, idx]))
+        baseline[name] = float(y_bin.mean())
+    return {
+        "per_class": per_class,
+        "baseline": baseline,
+        "macro": float(np.mean(list(per_class.values()))),
+        "macro_baseline": float(np.mean(list(baseline.values()))),
+    }
 
 
 def main():
