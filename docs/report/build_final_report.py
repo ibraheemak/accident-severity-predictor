@@ -216,7 +216,7 @@ def build():
         "severity classifiers, and the experimental results gathered to date. The Active "
         "Feature Acquisition reinforcement-learning agent described in the proposal is a "
         "designed but not-yet-implemented extension; its status is stated explicitly in "
-        "Section 6.",
+        "Section 5.",
         italic=True, color=GRAY, align=WD_ALIGN_PARAGRAPH.CENTER, size=10,
     )
 
@@ -261,7 +261,7 @@ def build():
         "weather — each of which may or may not be available, or worth the latency, at "
         "dispatch time. Eight classifiers are trained, one per subset of the three external "
         "sources, so that whichever combination of sources happens to be available at "
-        "inference time, a matching model exists. The long-term goal (Section 6) is a "
+        "inference time, a matching model exists. The long-term goal (Section 5) is a "
         "reinforcement-learning agent that decides at runtime which of the three sources are "
         "worth acquiring before invoking the matching classifier; that agent is not yet "
         "built, and the classifiers described in this report are the environment it will "
@@ -270,74 +270,22 @@ def build():
 
     add_page_break(doc)
 
-    # ================= 2. Data Sources =================
-    add_heading(doc, "2. Data Sources", level=1)
+    # ================= 2. Data Pipeline =================
+    add_heading(doc, "2. Data Pipeline & Dataset Construction", level=1)
 
-    add_heading(doc, "2.1 STATS19 — UK Official Accident Database", level=2)
     add_para(
         doc,
-        "STATS19 is Britain's official road-traffic casualty database, recording every "
-        "personal-injury accident reported to the police since 1979. It is downloaded via "
-        "the ropensci/stats19 R package and provides three tables joinable on "
-        "collision_index:",
+        "The predictive features are drawn from four sources: STATS19, the UK Department "
+        "for Transport's official road-accident database, which supplies the primary "
+        "records and the severity label; DfT AADF, annual traffic-volume counts joined to "
+        "each accident by nearest count point; OpenStreetMap, road-infrastructure detail "
+        "(speed cameras, lane count, medians) pulled via the Overpass API and Geofabrik "
+        "extracts; and Open-Meteo, objective historical weather at the accident's exact "
+        "location and hour, replacing STATS19's subjective officer-recorded weather field. "
+        "STATS19, AADF, and OpenStreetMap are free; Open-Meteo requires a paid Professional "
+        "plan (€99) for reliable historical-data volume. The pipeline below folds all four "
+        "into a single feature table stage by stage.",
     )
-    add_bullets(doc, [
-        ("Accidents ", "— location (lat/lon), date/time, road type, weather, light "
-                        "conditions, speed limit, junction type, severity."),
-        ("Casualties ", "— age, sex, casualty class, injury severity per person."),
-        ("Vehicles ", "— vehicle type, manoeuvre, driver age, engine capacity."),
-    ])
-
-    add_heading(doc, "2.2 DfT AADF — Traffic Volume", level=2)
-    add_para(
-        doc,
-        "The Department for Transport's Annual Average Daily Flow (AADF) dataset gives the "
-        "estimated number of vehicles passing each count point on the major road network per "
-        "day, for 2000–2024. Each accident is matched to the nearest AADF count point on "
-        "the same named road (falling back to the nearest count point on any road if no "
-        "same-road point exists), producing a road-busyness feature absent from STATS19 "
-        "itself.",
-    )
-
-    add_heading(doc, "2.3 OpenStreetMap — Road Infrastructure", level=2)
-    add_para(
-        doc,
-        "Road-level infrastructure features are pulled from OpenStreetMap: a Great Britain "
-        "PBF extract (via the osmextract R package) for national-scale road ways and "
-        "barriers, and the Overpass API for sparse point features (speed cameras, traffic "
-        "calming, traffic signals). Because the OSM snapshot reflects the network as it "
-        "exists today rather than as it was at each accident's date, these features are a "
-        "present-day proxy, not a historically exact record.",
-    )
-
-    add_heading(doc, "2.4 Open-Meteo — Historical Weather", level=2)
-    add_para(
-        doc,
-        "STATS19's weather_conditions field is a subjective category assessed after the "
-        "fact by the attending officer. Open-Meteo's Historical Weather API (ERA5/ERA5-Land "
-        "reanalysis) supplies objective, continuous hourly measurements — temperature, "
-        "precipitation, wind speed, snowfall, snow depth, and a WMO weather code — at the "
-        "exact latitude/longitude and hour of each accident, batched by date to keep call "
-        "volume manageable.",
-    )
-
-    add_heading(doc, "2.5 Data Sources Summary", level=2)
-    add_table(
-        doc,
-        ["Source", "Role", "Join method", "Cost"],
-        [
-            ["STATS19 (DfT)", "Primary dataset + labels", "Primary (no join)", "Free"],
-            ["DfT AADF Traffic", "Traffic volume feature", "Spatial (nearest count point)", "Free"],
-            ["OpenStreetMap", "Road infrastructure features", "Spatial (lat/lon radius)", "Free"],
-            ["Open-Meteo Historical", "Hourly weather at exact location", "API call by lat/lon + datetime", "Paid (Professional plan, €99)"],
-        ],
-        widths=[4.0, 4.0, 5.0, 3.5],
-    )
-
-    add_page_break(doc)
-
-    # ================= 3. Data Pipeline =================
-    add_heading(doc, "3. Data Pipeline & Dataset Construction", level=1)
 
     add_para(
         doc,
@@ -349,7 +297,7 @@ def build():
         "partial-observability training.",
     )
 
-    add_heading(doc, "3.1 Severity-Aware Sampling", level=2)
+    add_heading(doc, "2.1 Severity-Aware Sampling", level=2)
     add_para(
         doc,
         "STATS19 is heavily imbalanced toward Slight-injury collisions in the real "
@@ -360,7 +308,7 @@ def build():
         "revisited twice; the current configuration and its history are summarised below.",
     )
 
-    add_heading(doc, "3.2 Dataset-Difficulty History", level=2)
+    add_heading(doc, "2.2 Dataset-Difficulty History", level=2)
     add_para(
         doc,
         "Macro F1 on the binary Slight-vs-Severe task turns out to depend primarily on what "
@@ -392,11 +340,11 @@ def build():
         "legitimate but material choice: Fatal is ≈53% of Severe in the active dataset "
         "against ≈7% in the real population, so every macro-F1 figure in this report should "
         "be read as a score on that benchmark, not an estimate of field performance "
-        "(Section 7.6 discusses the population-realistic reconstruction). All three configs' "
+        "(Section 6.6 discusses the population-realistic reconstruction). All three configs' "
         "data are preserved on disk / in git history for reproducibility.",
     )
 
-    add_heading(doc, "3.3 Feature Engineering", level=2)
+    add_heading(doc, "2.3 Feature Engineering", level=2)
     add_para(
         doc,
         "Starting from the STATS19 fields available at call time, the pipeline successively "
@@ -421,12 +369,12 @@ def build():
             ["Risk-density", "hist_acc_rate_500m, hist_severe_frac_500m, hist_fatal_rate_500m, dist_to_nearest_hist_acc_m",
              "Computed only from strictly prior-year accidents — no leakage; +0.005 macro F1"],
             ["Dispatch-time casualties", "n_casualties, n_pedestrian_casualties, youngest/oldest_casualty_age",
-             "Single largest accuracy gain in the project (Section 7.3)"],
+             "Single largest accuracy gain in the project (Section 6.3)"],
         ],
         widths=[3.6, 6.0, 5.5],
     )
 
-    add_heading(doc, "3.4 Data Variants", level=2)
+    add_heading(doc, "2.4 Data Variants", level=2)
     add_bullets(doc, [
         ("raw ", "— the untransformed combined feature table, split into train/valid/test."),
         ("normalized ", "— cyclic-encoded (day-of-week, hour), log1p-transformed for "
@@ -450,10 +398,10 @@ def build():
 
     add_page_break(doc)
 
-    # ================= 4. Methodology =================
-    add_heading(doc, "4. Model Architecture & Training", level=1)
+    # ================= 3. Methodology =================
+    add_heading(doc, "3. Model Architecture & Training", level=1)
 
-    add_heading(doc, "4.1 Eight Source-Subset Classifiers", level=2)
+    add_heading(doc, "3.1 Eight Source-Subset Classifiers", level=2)
     add_para(
         doc,
         "Because any of the three external sources may or may not be acquired before a "
@@ -463,10 +411,10 @@ def build():
         "missing-value handling, trained via CODE/training/train/train_classifier.py, which "
         "defines the feature set through BASE_COLS (always present) plus SOURCE_COLS[source] "
         "(added when that source is acquired). The models are frozen once trained — they "
-        "form the environment that the planned RL agent (Section 6) will later query.",
+        "form the environment that the planned RL agent (Section 5) will later query.",
     )
 
-    add_heading(doc, "4.2 Target Variable", level=2)
+    add_heading(doc, "3.2 Target Variable", level=2)
     add_para(
         doc,
         "Two target formulations are supported: the native 3-class STATS19 severity label "
@@ -477,7 +425,7 @@ def build():
         "one — without the added noise of partial-observability masking.",
     )
 
-    add_heading(doc, "4.3 Hyperparameter Tuning", level=2)
+    add_heading(doc, "3.3 Hyperparameter Tuning", level=2)
     add_para(
         doc,
         "Hyperparameters are tuned with Optuna (CODE/training/tune/"
@@ -490,7 +438,7 @@ def build():
         "essentially flat (0.651 → 0.6517) under the same re-tune.",
     )
 
-    add_heading(doc, "4.4 Threshold Calibration", level=2)
+    add_heading(doc, "3.4 Threshold Calibration", level=2)
     add_para(
         doc,
         "CODE/training/train/calibrate_thresholds.py post-processes an already-trained "
@@ -502,8 +450,8 @@ def build():
 
     add_page_break(doc)
 
-    # ================= 5. Model family comparison (moved before RL per numbering) ===
-    add_heading(doc, "5. Choice of Model Family", level=1)
+    # ================= 4. Model family comparison (moved before RL per numbering) ===
+    add_heading(doc, "4. Choice of Model Family", level=1)
     add_para(
         doc,
         "Before committing to XGBoost as the deployed model, seventeen model families were "
@@ -555,19 +503,19 @@ def build():
     add_page_break(doc)
 
     # ================= 6. RL / AFA =================
-    add_heading(doc, "6. Active Feature Acquisition (Planned Extension)", level=1)
+    add_heading(doc, "5. Active Feature Acquisition (Planned Extension)", level=1)
     add_para(
         doc,
         "The eventual goal of the project is a reinforcement-learning agent that decides, at "
         "runtime and per accident, which of the three external sources are worth acquiring "
-        "before invoking the matching frozen classifier from Section 4 — trading prediction "
+        "before invoking the matching frozen classifier from Section 3 — trading prediction "
         "confidence against acquisition latency and API cost. This component has been fully "
         "designed but is not yet implemented; the eight classifiers described above are the "
         "environment it will be trained against. The design is summarised here so the "
         "planned system is documented alongside the parts that already exist.",
     )
 
-    add_heading(doc, "6.1 MDP Formulation", level=2)
+    add_heading(doc, "5.1 MDP Formulation", level=2)
     add_para(
         doc,
         "State: sₜ = (x_base, x_acquired, mₜ, pₜ), where x_base is the STATS19 fields known "
@@ -593,11 +541,11 @@ def build():
         "objective; both are treated as tunable design parameters.",
     )
 
-    add_heading(doc, "6.2 Planned Baselines", level=2)
+    add_heading(doc, "5.2 Planned Baselines", level=2)
     add_bullets(doc, [
         ("No-acquisition ", "— the base-only classifier; zero cost, lower-bound accuracy."),
         ("Full-acquisition ", "— always acquires all three sources; maximum cost, "
-                               "upper-bound accuracy (see Section 7.5 for the closely related "
+                               "upper-bound accuracy (see Section 6.5 for the closely related "
                                "full-STATS19 ceiling)."),
         ("Static feature priority ", "— a fixed acquisition order (e.g. weather → OSM → "
                                       "AADF) applied up to the same average cost budget as the "
@@ -605,7 +553,7 @@ def build():
     ])
     add_para(
         doc,
-        "The per-source ablation results in Section 7 are the intended basis for calibrating "
+        "The per-source ablation results in Section 6 are the intended basis for calibrating "
         "each source's acquisition cost Cᵢ in the reward function: a source with a large "
         "accuracy gain relative to its cost should be cheap to acquire; a source that "
         "contributes little should be expensive enough that the agent learns to skip it.",
@@ -614,22 +562,22 @@ def build():
     add_page_break(doc)
 
     # ================= 7. Experiments & Results =================
-    add_heading(doc, "7. Experiments & Results", level=1)
+    add_heading(doc, "6. Experiments & Results", level=1)
 
-    add_heading(doc, "7.1 Headline Result", level=2)
+    add_heading(doc, "6.1 Headline Result", level=2)
     add_para(
         doc,
         "The current project focus, the full-acquisition (aadf+osm+meteo) binary "
         "Slight-vs-Severe classifier on the normalized data variant, reaches test macro F1 = "
         "0.7322 in its single-run training log and 0.7367 ± 0.001 averaged over three seeds "
-        "in the model-family comparison (Section 5) — both measured on the current, "
-        "1,400/2,800-cap dataset (Section 3.2). All macro-F1 figures in this report are tied "
+        "in the model-family comparison (Section 4) — both measured on the current, "
+        "1,400/2,800-cap dataset (Section 2.2). All macro-F1 figures in this report are tied "
         "to a specific dataset configuration; comparing across configurations without noting "
         "which one is in play is misleading, since the score is driven substantially by how "
-        "Fatal-heavy the Severe class is (Section 3.2).",
+        "Fatal-heavy the Severe class is (Section 2.2).",
     )
 
-    add_heading(doc, "7.2 Dispatch-Time Ceiling: Full-STATS19 Upper Bound", level=2)
+    add_heading(doc, "6.2 Dispatch-Time Ceiling: Full-STATS19 Upper Bound", level=2)
     add_para(
         doc,
         "To measure the accuracy cost of restricting the model to genuinely dispatch-time "
@@ -659,7 +607,7 @@ def build():
          "recall throughout this project for exactly this reason."),
     ])
 
-    add_heading(doc, "7.3 Dispatch-Time Casualty Features", level=2)
+    add_heading(doc, "6.3 Dispatch-Time Casualty Features", level=2)
     add_para(
         doc,
         "Aggregating the casualties table into four dispatch-time-plausible fields "
@@ -674,7 +622,7 @@ def build():
         "complexity.",
     )
 
-    add_heading(doc, "7.4 Spatial Risk-Density Features", level=2)
+    add_heading(doc, "6.4 Spatial Risk-Density Features", level=2)
     add_para(
         doc,
         "Four location-history features (accident rate, severe fraction, fatal rate, and "
@@ -684,7 +632,7 @@ def build():
         "both validation and test.",
     )
 
-    add_heading(doc, "7.5 Vehicle-Type Flags", level=2)
+    add_heading(doc, "6.5 Vehicle-Type Flags", level=2)
     add_para(
         doc,
         "Of fifteen candidate per-vehicle-type flags derived from the vehicles table, eight "
@@ -696,7 +644,7 @@ def build():
         "normalized binary variant).",
     )
 
-    add_heading(doc, "7.6 Population-Realistic Evaluation", level=2)
+    add_heading(doc, "6.6 Population-Realistic Evaluation", level=2)
     add_para(
         doc,
         "Because the training/evaluation splits are deliberately severity-oversampled "
@@ -714,12 +662,12 @@ def build():
     add_page_break(doc)
 
     # ================= 8. Discussion =================
-    add_heading(doc, "8. Discussion & Limitations", level=1)
+    add_heading(doc, "7. Discussion & Limitations", level=1)
     add_bullets(doc, [
         ("Class balance is deliberately non-natural. ",
          "Every headline metric in this report is measured on a Fatal-enriched benchmark "
          "chosen to make the classification problem tractable and comparable across "
-         "experiments; it is not an estimate of real-world dispatch accuracy. Section 7.6 "
+         "experiments; it is not an estimate of real-world dispatch accuracy. Section 6.6 "
          "gives the reconstruction path back to a population-realistic estimate."),
         ("OSM is a present-day snapshot. ", "Road-infrastructure features reflect the "
          "network as it exists today, not as it was at each historical accident's date, "
@@ -729,18 +677,18 @@ def build():
          "workable for offline training-data construction but would need a paid plan for "
          "real-time dispatch-time acquisition at scale."),
         ("Model-family choice barely matters once the feature pipeline is fixed. ",
-         "Section 5 shows the gap between the deployed XGBoost model and a plain thresholded "
+         "Section 4 shows the gap between the deployed XGBoost model and a plain thresholded "
          "linear regression is only 0.020 macro F1 — most of this project's measurable "
          "contribution is in the feature engineering, not the learning algorithm."),
         ("The Active Feature Acquisition agent is not yet built. ",
-         "Section 6 documents its design; implementing, training, and evaluating it against "
+         "Section 5 documents its design; implementing, training, and evaluating it against "
          "the three baselines remains the primary open item in the project plan."),
     ])
 
     add_page_break(doc)
 
-    # ================= 9. Conclusion =================
-    add_heading(doc, "9. Conclusion & Future Work", level=1)
+    # ================= 8. Conclusion =================
+    add_heading(doc, "8. Conclusion & Future Work", level=1)
     add_para(
         doc,
         "This project has built and validated a complete, reproducible pipeline for "
@@ -757,11 +705,11 @@ def build():
     add_para(
         doc,
         "The immediate next steps are: (1) implement and train the Active Feature Acquisition "
-        "reinforcement-learning agent designed in Section 6 against the frozen classifiers as "
+        "reinforcement-learning agent designed in Section 5 against the frozen classifiers as "
         "its environment, calibrating per-source acquisition costs from the ablation results "
-        "in Section 7; (2) evaluate the trained agent against the no-acquisition, "
+        "in Section 6; (2) evaluate the trained agent against the no-acquisition, "
         "full-acquisition, and static-priority baselines; and (3) extend the population-"
-        "realistic reconstruction (Section 7.6) into a standard reporting step alongside every "
+        "realistic reconstruction (Section 6.6) into a standard reporting step alongside every "
         "future macro-F1 result, so headline numbers and field-deployment expectations are "
         "never conflated.",
     )
@@ -795,7 +743,7 @@ def build():
         doc,
         "There is no automated test suite, linter, or CI configuration in this repository; "
         "correctness is validated experimentally, via the ablations and comparisons "
-        "summarised in Section 7.",
+        "summarised in Section 6.",
     )
 
     add_heading(doc, "Appendix B: References", level=1)
