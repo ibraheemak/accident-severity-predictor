@@ -370,6 +370,8 @@ def build():
              "Computed only from strictly prior-year accidents — no leakage; +0.005 macro F1"],
             ["Dispatch-time casualties", "n_casualties, n_pedestrian_casualties, youngest/oldest_casualty_age",
              "Single largest accuracy gain in the project (Section 6.3)"],
+            ["Normalization", "day_of_week_sin/cos, hour_sin/cos (cyclic); log1p + z-score on 17 skewed/continuous columns",
+             "Train-only statistics applied to valid/test; nominal codes left as raw integer codes for native XGBoost categorical splits"],
         ],
         widths=[3.6, 6.0, 5.5],
     )
