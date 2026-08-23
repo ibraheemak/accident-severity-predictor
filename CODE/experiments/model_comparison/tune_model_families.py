@@ -22,7 +22,7 @@ the one-rule stump, OLS) are carried through at their fixed configuration so
 the table stays complete.
 
 Usage:
-  python CODE/experiments/tune_model_families.py [--trials 30] [--seeds 42 43 44]
+  python CODE/experiments/model_comparison/tune_model_families.py [--trials 30] [--seeds 42 43 44]
 """
 import argparse
 import json
@@ -31,7 +31,7 @@ import time
 import warnings
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "train"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "train"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np

@@ -12,9 +12,9 @@ every other family gets median-imputed + z-scored numerics and most-frequent-imp
 one-hot categoricals. Reproduce with:
 
 ```bash
-python CODE/experiments/compare_model_families.py --seeds 42 43 44
-python CODE/experiments/tune_model_families.py --trials 120   # equal-budget tuning
-python CODE/experiments/plot_model_families.py      # figures only, from the saved CSVs
+python CODE/experiments/model_comparison/compare_model_families.py --seeds 42 43 44
+python CODE/experiments/model_comparison/tune_model_families.py --trials 120   # equal-budget tuning
+python CODE/experiments/model_comparison/plot_model_families.py      # figures only, from the saved CSVs
 ```
 
 ## Results

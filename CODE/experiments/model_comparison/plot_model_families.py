@@ -3,7 +3,7 @@
 Kept separate so the figures can be regenerated from the saved CSVs without
 retraining anything:
 
-    python CODE/experiments/plot_model_families.py
+    python CODE/experiments/model_comparison/plot_model_families.py
 
 Palette: three categorical hues (blue / orange / aqua), validated for
 colour-vision deficiency separation; every chart is single-measure so colour
@@ -47,13 +47,12 @@ def fig_macro_f1(summary, out):
     d = summary.sort_values("macro_f1")
     colors = [ORANGE if m == INCUMBENT else BLUE for m in d.model]
     fig, ax = plt.subplots(figsize=(8.5, 6.2))
-    bars = ax.barh(d.model, d.macro_f1, color=colors, height=0.62,
-                   xerr=d.macro_f1_sd.fillna(0), error_kw=dict(ecolor=INK_2, lw=1, capsize=2))
+    bars = ax.barh(d.model, d.macro_f1, color=colors, height=0.62)
     for bar, v in zip(bars, d.macro_f1):
         ax.text(v + 0.012, bar.get_y() + bar.get_height() / 2, f"{v:.3f}",
                 va="center", fontsize=9, color=INK)
     ax.set_xlim(0, max(d.macro_f1) * 1.16)
-    ax.set_xlabel("Test macro F1  (mean over seeds, bars = ±1 sd)")
+    ax.set_xlabel("Test macro F1  (mean over seeds)")
     ax.set_title("Test macro F1 by model family")
     ax.text(0.99, 0.02, f"orange = deployed classifier ({INCUMBENT})", transform=ax.transAxes,
             ha="right", fontsize=8.5, color=INK_2)

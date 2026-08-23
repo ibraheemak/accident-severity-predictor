@@ -28,7 +28,7 @@ Outputs (all under docs/figures/model_families/):
   fig6_confusion.png           confusion matrices for the four best families
 
 Usage:
-  python CODE/experiments/compare_model_families.py [--seeds 42 43 44] [--quick]
+  python CODE/experiments/model_comparison/compare_model_families.py [--seeds 42 43 44] [--quick]
 """
 import argparse
 import sys
@@ -36,7 +36,7 @@ import time
 import warnings
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "train"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "training" / "train"))
 
 import numpy as np
 import pandas as pd
