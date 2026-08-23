@@ -4,9 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A UK road-accident severity predictor (STATS19 data). The core deliverable is 8 frozen XGBoost classifiers (one per subset of 3 optional external data sources: AADF traffic, OSM road infrastructure, Open-Meteo weather), trained to predict Fatal/Serious/Slight (or binary Slight-vs-Severe) from only what a 999 dispatcher would know. The eventual goal (per README) is a Reinforcement Learning "Active Feature Acquisition" agent that decides at runtime which of the 3 external sources are worth acquiring before invoking the matching frozen classifier — the classifiers here are the environment that agent will sit on top of, not yet implemented.
+A UK road-accident severity predictor (STATS19 data). The core deliverable is a bank of frozen XGBoost classifiers — one per **acquisition subset** — trained to predict Fatal/Serious/Slight (or binary Slight-vs-Severe) from only what a 999 dispatcher would know. The eventual goal (per README) is a Reinforcement Learning "Active Feature Acquisition" agent that decides at runtime which information is worth acquiring before invoking the matching frozen classifier — the classifiers here are the environment that agent will sit on top of, not yet implemented.
 
-**Current focus:** improving the macro F1 of the binary Slight-vs-Severe classifier on the `normalized` (unmasked, clean one-row-per-collision) data variant — i.e. `models/classifier_aadf_meteo_osm_normalized_binary.json`. Prefer changes/experiments that target this specific model+variant over generic changes to the masked/3-class models unless asked otherwise.
+**Action-space revision (August 2026) — the "8 frozen classifiers" design is superseded.** It was 8 classifiers, one per subset of the 3 external sources, trained on randomly masked STATS19 fields. Two things changed:
+- **Masking is no longer used.** It cost accuracy at every missingness level versus a dedicated per-subset model, and made every headline number a pooled average across missingness levels. `generate_masked_splits.R` and the `masked` variant still exist and still run, but no current work uses them. Don't default to `--data-variant masked`.
+- **STATS19 fields are now acquirable too**, since the 3 external sources carry very little of the signal. One action per field would mean 2^31 models, so features are grouped into **10 bundles** (`BUNDLE_COLS`/`BUNDLE_TIERS` in `train_classifier.py`), each = one real acquisition act, in three cost tiers: *ask_caller* (`vehicles`, `casualties`, `casualty_demographics`), *map_lookup* (`road_class`, `road_environment`, `junction`, `crash_history`), *external_api* (`aadf`, `osm`, `meteo`). Only the call timestamp is free. That gives 2^10 = 1024 classifiers, pre-trained by `CODE/training/train/bundle_sweep.py` into `models/subsets/<variant>_<task>/<mask>.json` — the RL environment's model cache.
+
+**Bundle invariants (easy to break):** bundle order in `BUNDLE_COLS` *is* the bitmask bit order, and `bundle_feature_columns()` emits columns in that order. XGBoost binds features positionally, so **reordering bundles, or changing any bundle's contents, silently invalidates every cached model** — wipe `models/subsets/` and re-run the sweep. An import-time assert checks the bundles still cover `BASE_COLS + SOURCE_COLS + weather_conditions`, so a feature added to `BASE_COLS` without a bundle home fails loudly rather than dropping out of the action space.
+
+**Current focus:** the RL Active Feature Acquisition agent over the 10-bundle action space, on the `normalized` (unmasked, clean one-row-per-collision) data variant, binary Slight-vs-Severe. Prefer changes/experiments that target this variant+task over generic changes to the masked/3-class models unless asked otherwise. The single-model reference point remains `models/classifier_aadf_meteo_osm_normalized_binary.json` (full-information, test macro F1 0.7367).
 
 **Dataset-difficulty history (17 July 2026) — read before comparing any macro F1 across dates.** Macro F1 on this task is primarily a function of how Fatal-heavy the Severe class is (Fatal collisions are easy; Serious-vs-Slight is the genuinely hard boundary), which `SERIOUS_CAP`/`SLIGHT_CAP` in `stats19_download.R` directly control. Three configs have been tried:
   1. **2,800/5,600 caps → 89,791 collisions, 36% Fatal-of-Severe → test macro F1 ≈ 0.6967.** The original config; superseded below, but still the "moderate" reference point and what most historical experiment notes in this repo (feature ablations, model-family sweeps, ensemble results) were measured against.
@@ -50,18 +56,32 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Train a classifier (defaults to the masked, 3-class variant):
+Train one classifier (defaults to the `normalized`, 3-class variant):
 ```bash
-python CODE/training/train/train_classifier.py --sources aadf osm meteo
-python CODE/training/train/train_classifier.py --sources aadf osm meteo --binary
-python CODE/training/train/train_classifier.py --sources aadf osm meteo --data-variant normalized --use-best-params
+python CODE/training/train/train_classifier.py --bundles vehicles casualties --binary
+python CODE/training/train/train_classifier.py --mask 7 --binary --use-best-params
+python CODE/training/train/train_classifier.py --bundles            # free-information model
+python CODE/training/train/train_classifier.py --sources aadf osm meteo --binary   # legacy
 ```
-`--sources` accepts any subset of `aadf osm meteo` (empty = base-only model). `--data-variant` is `masked` (default, partial-observability training) | `normalized` (clean, one row per accident) | `raw` (unnormalized). `--use-best-params` loads Optuna-tuned hyperparameters from `models/best_hyperparams[_<variant>][_binary].json` if present, else falls back to the masked-variant tune.
+The action space is selected by exactly one of three mutually exclusive flags:
+- `--bundles` — current 10-bundle action space; any subset of `vehicles casualties casualty_demographics road_class road_environment junction crash_history aadf osm meteo`. Passing it with no values trains the timestamp-only model. Writes `classifier_bundles<mask:04d>_*.json`.
+- `--mask` — the same thing as an integer bitmask 0..1023, which is the RL state encoding and the subset-cache key. Convenient for reproducing one subset from a sweep.
+- `--sources` — **legacy** 3-external-source action space, kept because `CODE/experiments/` is written against it. Used (with all three sources) when none of the three flags is given.
+
+`--data-variant` is `normalized` (default) | `masked` (deprecated, see above) | `raw` (unnormalized). `--use-best-params` loads Optuna-tuned hyperparameters from `models/best_hyperparams[_<variant>][_binary].json` if present, else falls back to the masked-variant tune.
 
 Tune hyperparameters (writes `models/best_hyperparams*.json`):
 ```bash
 python CODE/training/tune/tune_full_acquisition_classifier.py --n-trials 60 [--binary] [--data-variant normalized]
 ```
+
+Pre-train the 1024 acquisition-subset classifiers into the RL model cache (resumable; ~35 min for a full sweep, ~2 s per fit):
+```bash
+python CODE/training/train/bundle_sweep.py                  # all 1024, binary + normalized
+python CODE/training/train/bundle_sweep.py --max-bundles 1  # 11-model smoke test
+python CODE/training/train/bundle_sweep.py --masks 0 1023   # specific subsets only
+```
+Writes `models/subsets/<variant>_<task>/<mask>.json` plus a per-subset metrics CSV in `docs/figures/bundle_sweep/`. Skips masks already cached unless `--force`.
 
 Calibrate decision thresholds on an already-trained model (no retraining):
 ```bash
@@ -84,8 +104,10 @@ There is no test suite, linter, or CI config in this repo.
 
 **`train_classifier.py` is the shared library every other Python script imports from** (`feature_columns()`, `load_split()`, `prepare_xy()`, `unify_categorical_dtypes()`, `evaluate()`, `MODEL_DIR`, `SEVERITY_LABELS`/`BINARY_LABELS`, `DATA_VARIANT_DIRS`). It defines the feature set via `BASE_COLS` (always-on) + `SOURCE_COLS[source]` (added when that source is acquired) — this is the single place to add/remove a model feature. Since Python resolves `from train_classifier import ...` via the importing script's own directory (not CWD), every script outside `training/train/` (i.e. everything in `training/tune/` and `experiments/`) has a `sys.path.insert(0, ...)` shim at the top pointing at `training/train/` — keep this pattern if you add new scripts elsewhere, or co-locate the script in `training/train/` instead.
 
-**Masking simulates partial dispatch-time information.** `generate_masked_splits.R` expands each accident into 11 copies (1 unmasked + 10 with 0–32 random "acquirable" fields blanked, per `ACQUIRABLE_COLS`). This is why the masked variant has ~11x the rows of `normalized`/`raw`, and why headline masked-variant metrics are a pooled average across missingness levels — see `data/raw` size counts and `docs/data_pipeline.md` §13 before drawing conclusions from a masked-variant number alone.
+**Masking is deprecated (August 2026) — the section below documents how it worked, not what to use.** Partial observability is now handled by training a dedicated classifier per acquisition subset (see the action-space revision above), not by masking. `generate_masked_splits.R` still runs as part of `run_pipeline.R` and the historical masked-variant results stand, but new work should not use `--data-variant masked`.
 
-**Three data variants exist for a reason, not by accident:** `raw` (untransformed) and `normalized` (cyclic-encoded, log1p'd, z-scored, unmasked) isolate whether normalization matters; `masked` isolates whether partial observability matters. A hyperparameter tune or feature change validated on one variant does not automatically transfer to another — the project's own history includes tuned hyperparameters that were optimal for `masked` but measurably worse than defaults on `normalized` (heavier regularization was needed for the noisier 691k-row masked set than the clean 62k-row normalized set). When evaluating a change, check the specific variant you actually care about, not just `masked` by default.
+**How masking worked.** `generate_masked_splits.R` expands each accident into 11 copies (1 unmasked + 10 with 0–32 random "acquirable" fields blanked, per `ACQUIRABLE_COLS`). This is why the masked variant has ~11x the rows of `normalized`/`raw`, and why headline masked-variant metrics are a pooled average across missingness levels — see `data/raw` size counts and `docs/data_pipeline.md` §13 before drawing conclusions from a masked-variant number alone.
+
+**Three data variants exist for a reason, not by accident:** `raw` (untransformed) and `normalized` (cyclic-encoded, log1p'd, z-scored, unmasked) isolate whether normalization matters; `masked` isolates whether partial observability matters. A hyperparameter tune or feature change validated on one variant does not automatically transfer to another — the project's own history includes tuned hyperparameters that were optimal for `masked` but measurably worse than defaults on `normalized` (heavier regularization was needed for the noisier 691k-row masked set than the clean 62k-row normalized set). When evaluating a change, check the specific variant you actually care about — which is now `normalized`, since masking is deprecated.
 
 **Class balance is deliberately non-natural — currently very much so.** `stats19_download.R` keeps all Fatal collisions but caps Serious/Slight per year (`SERIOUS_CAP`/`SLIGHT_CAP`, currently 1,400/2,800 — see the dataset-difficulty history note above), so every train/valid/test split is severity-oversampled relative to the real population (currently ~52% Severe in the data vs ~21% in reality, and Fatal is ~53% of Severe here vs ~7% in reality — far more skewed than the original 2,800/5,600-cap config). Macro F1 and balanced accuracy are the metrics to trust; plain accuracy on these splits is systematically *lower* than field accuracy would be, and can be gamed upward by a model that just leans toward the majority class. `experiments/evaluate_population.py` reconstructs true population accuracy from the per-year sampling fractions in `data/raw/stats19/stats19_<TIMESTAMP>/*_meta.txt` if you need that number — always report it alongside minority-class recall, since natural accuracy alone hides how many severe accidents get missed.

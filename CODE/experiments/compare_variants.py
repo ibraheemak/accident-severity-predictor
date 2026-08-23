@@ -2,7 +2,10 @@
 """compare_variants.py
 
 Trains and evaluates every combination of:
-  - source subset: all 8 subsets of {aadf, osm, meteo}
+  - source subset: all 8 subsets of {aadf, osm, meteo} (the legacy 3-source
+    action space; superseded August 2026 by the 10 bundles in BUNDLE_COLS,
+    swept by CODE/training/train/bundle_sweep.py -- these results still stand as
+    external-source ablations)
   - data variant: masked, normalized, raw (see train_classifier.py docstring)
   - target: 3-class severity, binary (Slight vs Severe)
 

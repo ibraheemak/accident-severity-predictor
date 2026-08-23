@@ -4,9 +4,12 @@
 One-time hyperparameter search for the Full-Acquisition (aadf+osm+meteo)
 classifier, using Optuna + GroupKFold cross-validation. The winning
 hyperparameters are saved to models/best_hyperparams.json and are meant to
-be reused, unchanged, for all 8 source-subset classifiers trained by
+be reused, unchanged, for every subset classifier trained by
 train_classifier.py (--use-best-params) -- we tune once on the richest
-feature set rather than re-running a search 8 times.
+feature set rather than re-running a search per subset -- which matters far
+more now that there are 1024 bundle subsets (bundle_sweep.py) than it did
+when there were 8. A per-subset tune would also make any comparison
+between subsets a comparison of tuning budgets, not of information.
 
 GroupKFold is grouped by collision_index: generate_masked_splits.R expands
 each original accident into 11 near-duplicate copies (1 unmasked + 10

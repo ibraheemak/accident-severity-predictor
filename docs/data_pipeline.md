@@ -726,6 +726,16 @@ left as NaN.
 
 ## 13. Masked-Copy Generation for Partial-Observability Training — `generate_masked_splits.R`
 
+> **Deprecated (August 2026) — kept for reference, no longer used.** Partial
+> observability is now handled by training a *dedicated classifier per
+> acquisition subset* (10 feature bundles → 2^10 = 1024 frozen models,
+> pre-trained by `CODE/training/train/bundle_sweep.py` into `models/subsets/`)
+> rather than by masking a single model's inputs. Masking lost to that
+> approach at every level of missingness, and it made every headline metric a
+> pooled average across missingness levels rather than a number describing any
+> real deployment scenario. This stage still runs as part of `run_pipeline.R`
+> and the `masked` splits are still produced; nothing current consumes them.
+
 The model needs to perform well when only some STATS19 fields have been
 acquired at inference time (a "999 call" scenario where the responder
 doesn't yet know e.g. `junction_detail` or `second_road_class`). To train
@@ -811,9 +821,18 @@ pre-existing NAs above):
 
 ## 14. Next steps (not yet done)
 
-- Decide treatment for `light_conditions` (replace with an external API at
-  inference, or keep the STATS19 value) — `weather_conditions` is now
-  superseded by the Open-Meteo features above.
+- ~~Decide treatment for `light_conditions`~~ — done (August 2026): it is an
+  acquirable field in the `road_environment` bundle, alongside
+  `weather_conditions`. `weather_conditions` is *not* superseded by the
+  Open-Meteo features after all — the two are now acquired independently, so
+  the subjective officer judgement and the objective measurement can both be
+  present. Every bundle is strictly additive; no acquisition removes a column.
+- **Per-instance headroom check for the RL agent** — the 1024-subset sweep
+  measures *population-average* value of each bundle. If the best subset is
+  effectively the same for every collision, an adaptive policy cannot beat the
+  best fixed subset and the AFA framing has no headroom. Score every test
+  collision under all 1024 cached models and compare a per-instance oracle
+  against the best fixed subset before building the agent.
 - ~~Casualty-derived features~~ — done, see section 10.
 - Extend `YEARS` further back (e.g. to ~2010) to grow Fatal further, following
   the same recipe as the current 2016 extension — untested, diminishing
@@ -824,7 +843,8 @@ pre-existing NAs above):
   done. Re-ran `tune_full_acquisition_classifier.py` (60 trials 3-class, 100
   trials binary) on the current feature set; the search converged to
   essentially the same params as before (old config wasn't actually stale),
-  but retraining all 8 subset classifiers with `--use-best-params` still
+  but retraining all 8 external-source subset classifiers (the pre-August-2026
+  action space) with `--use-best-params` still
   lifted the flagship (aadf+osm+meteo) 3-class test macro F1 from 0.4845 to
   0.4928 uncalibrated (0.503 → 0.5028 calibrated), driven mostly by the
   weak "Serious" class (F1 0.339 → 0.39). Binary flagship macro F1 stayed
