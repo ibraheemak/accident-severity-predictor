@@ -18,8 +18,8 @@ Note: models/ is gitignored repo-wide, so the saved artifact is local-only,
 like every other classifier here.
 
 Usage:
-    python CODE/experiments/full_stats19/build_full_stats19_features.py --out-dir data/splits/full_stats19_v2  # (see its docstring for the v2 field set)
-    python CODE/experiments/full_stats19/train_full_stats19_model.py
+    python CODE/experiments/leakage_audit/build_full_stats19_features.py --out-dir data/splits/full_stats19_v2  # (see its docstring for the v2 field set)
+    python CODE/experiments/leakage_audit/train_full_stats19_model.py
 """
 
 import argparse
@@ -43,7 +43,7 @@ FILE_STEM = "classifier_aadf_meteo_osm_normalized_binary_fullstats19"
 EXPERIMENT_NOTE = ("full-STATS19 upper bound (NOT a deployment model -- uses "
                    "post-collision/forensic fields no 999 dispatcher has; "
                    "police_attended is leakage-adjacent). See "
-                   "CODE/experiments/full_stats19/full_stats19_upper_bound.py.")
+                   "CODE/experiments/leakage_audit/full_stats19_upper_bound.py.")
 
 
 def load_frames(full_dir: Path, feats, cat_cols):

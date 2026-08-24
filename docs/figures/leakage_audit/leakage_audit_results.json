@@ -1,0 +1,55 @@
+{
+  "dispatch": {
+    "macro_f1": 0.7369253358607069,
+    "balanced_accuracy": 0.7372085413069019,
+    "roc_auc": 0.8117458411857319,
+    "severe_recall": 0.73050173869846,
+    "slight_recall": 0.7439153439153439,
+    "accuracy": 0.7369971816551371,
+    "confusion_matrix": [
+      [
+        2812,
+        968
+      ],
+      [
+        1085,
+        2941
+      ]
+    ],
+    "n_test": 7806,
+    "n_features": 52
+  },
+  "full": {
+    "macro_f1": 0.7623728091550219,
+    "balanced_accuracy": 0.7623623037557463,
+    "roc_auc": 0.8455530454164333,
+    "severe_recall": 0.7704918032786885,
+    "slight_recall": 0.7542328042328043,
+    "accuracy": 0.7626184985908275,
+    "confusion_matrix": [
+      [
+        2851,
+        929
+      ],
+      [
+        924,
+        3102
+      ]
+    ],
+    "n_test": 7806,
+    "n_features": 83
+  },
+  "gap": {
+    "macro_f1": 0.02544747329431507,
+    "balanced_accuracy": 0.025153762448844375,
+    "roc_auc": 0.03380720423070138,
+    "severe_recall": 0.03999006458022847
+  },
+  "features_added": {
+    "Collision record": 5,
+    "Police attendance": 1,
+    "Vehicle / driver": 18,
+    "Casualty detail": 7
+  },
+  "n_features_added": 31
+}

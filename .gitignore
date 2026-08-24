@@ -16,7 +16,7 @@ models/
 data/archive_*/
 models/archive_*/
 # Full-STATS19 upper-bound experiment outputs (reference only, not the
-# deployment pipeline). Regenerate with CODE/experiments/build_full_stats19_features.py
+# deployment pipeline). Regenerate with CODE/experiments/leakage_audit/build_full_stats19_features.py
 # from the archived raw download. Kept out of git to avoid ~80 MB of derived CSVs.
 data/splits/full_stats19/
 data/splits/full_stats19_v2/

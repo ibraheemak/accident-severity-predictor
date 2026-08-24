@@ -20,8 +20,8 @@ them first with build_full_stats19_features.py --out-dir, or point --full-dir
 elsewhere). Run from repo root.
 
 Usage:
-    python CODE/experiments/full_stats19/full_stats19_upper_bound.py   # (builds nothing; see its docstring)
-    python CODE/experiments/full_stats19/tune_full_stats19_model.py --n-trials 80
+    python CODE/experiments/leakage_audit/full_stats19_upper_bound.py   # (builds nothing; see its docstring)
+    python CODE/experiments/leakage_audit/tune_full_stats19_model.py --n-trials 80
 """
 
 import argparse
