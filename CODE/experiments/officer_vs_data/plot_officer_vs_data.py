@@ -4,7 +4,7 @@
 Regenerates figures from the CSVs weather_agreement.py and weather_predictive_test.py
 already wrote, so nothing is retrained here:
 
-    python CODE/experiments/officer_vs_data/plot_officer_vs_data.py
+    python3 CODE/experiments/officer_vs_data/plot_officer_vs_data.py
 
 Figures (docs/figures/officer_vs_data/):
   fig1_agreement_matrix.png     officer category x Open-Meteo condition, row %
@@ -178,7 +178,7 @@ def fig_model_deltas(out: Path):
     ax.set_ylim(-0.052, max(vals) * 1.22)
     ax.set_xticks([])
     ax.set_ylabel("Test score (mean over 5 seeds)", fontsize=10)
-    ax.set_title("Added to the full dispatch feature set", loc="left", fontsize=11, fontweight="bold", pad=12)
+
 
     # Legend
     from matplotlib.patches import Patch
@@ -187,10 +187,8 @@ def fig_model_deltas(out: Path):
     ax.legend(handles=legend_elements, loc="upper left", frameon=False, fontsize=9)
 
     _style(ax, axis="y")
-    fig.suptitle("Weather: worth something on its own, nothing added to dispatch features",
+    fig.suptitle("Test scores",
                 fontsize=12.5, fontweight="bold", y=0.98)
-    fig.text(0.5, -0.02, "Deltas shown in italics (vs. the officer baseline)",
-            ha="center", fontsize=8.5, color=INK_2)
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
