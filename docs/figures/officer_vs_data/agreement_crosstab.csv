@@ -1,0 +1,10 @@
+weather_conditions,Dry,Drizzle,Rain,Snow
+"Fine, no high winds",35742,6044,332,97
+"Raining, no high winds",1932,2954,609,68
+"Snowing, no high winds",93,17,3,99
+Fine + high winds,417,146,12,4
+Raining + high winds,180,386,130,10
+Snowing + high winds,9,9,0,14
+Fog or mist,287,20,1,2
+Other,898,257,15,8
+Unknown,936,225,23,4
