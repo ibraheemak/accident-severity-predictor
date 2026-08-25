@@ -14,7 +14,8 @@ Both use the canonical tuned params from best_hyperparams_normalized_binary.json
 so the gap is an information gap, not a tuning artefact.
 
     fig1_leakage_gap.png       test metrics side by side, gap annotated
-    fig2_feature_budget.png    where the +31 added features come from
+    fig2_feature_budget.png    the 52-vs-83 feature budget
+    fig3_added_features_by_group.png   the added features, named by group
     leakage_audit_results.json the numbers behind both figures
 
 Run from the repo root (needs data/splits/full_stats19_v2/, built by
@@ -28,11 +29,13 @@ Adjacent-pair CVD dE 24.7, normal-vision dE 33.6, both modes pass.
 """
 import json
 import sys
+import textwrap
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -166,7 +169,7 @@ def fig_gap(d, f, out_path):
 
 
 def fig_budget(d, f, out_path):
-    """Where the +32 come from: one stacked bar per model, shared 0-84 scale."""
+    """One stacked bar per model, shared 0-83 scale. Groups named in fig3."""
     fig, ax = plt.subplots(figsize=(8.4, 3.4))
     gap = 0.35                                  # surface gap between stacked segments
 
@@ -174,7 +177,6 @@ def fig_budget(d, f, out_path):
     ax.text(d["n_features"] / 2, 1, f"{d['n_features']} dispatch-time features",
             ha="center", va="center", color="white", fontsize=9.5, fontweight="bold")
 
-    left = 0
     ax.barh(0, d["n_features"] - gap, height=.5, color=BLUE, zorder=3)
     ax.text(d["n_features"] / 2, 0, f"{d['n_features']}", ha="center", va="center",
             color="white", fontsize=9.5, fontweight="bold")
@@ -189,10 +191,6 @@ def fig_budget(d, f, out_path):
                 color=INK if shade in GROUP_SHADES[:2] else "white",
                 fontsize=7.5 if n < 3 else 9, fontweight="bold")
         left += n
-
-    # The +1 sliver is the audit's whole point -- call it out, it can't be read.
-    attend_x = d["n_features"] + len(ADDED_GROUPS[0][1]) + 0.5
-
 
     handles = [plt.Rectangle((0, 0), 1, 1, color=s) for s in GROUP_SHADES]
     labels = [f"+{len(c)}  {n}" for n, c in ADDED_GROUPS]
@@ -214,6 +212,57 @@ def fig_budget(d, f, out_path):
     print(f"wrote {out_path}")
 
 
+def fig_groups(d, f, out_path):
+    """The added features, named. One row per group: heading, bar, the fields.
+
+    Row heights are computed from each group's wrapped field list (18 names take
+    far more room than 1), and the figure height follows from their sum -- a
+    fixed row pitch makes the long groups collide with the next heading. Same
+    shade per group as fig2's stacked bar, so the two read as one story. Field
+    names are small and muted: a reference list, not the first thing the eye
+    should land on.
+    """
+    WRAP = 76               # characters per line of the monospace field list
+    LINE = 0.62             # vertical units per wrapped line
+    HEAD, BAR, PAD = 0.55, 1.15, 0.75   # units to heading, to bar, after the list
+
+    wrapped = [textwrap.fill("  ".join(cols), WRAP).split("\n") for _, cols in ADDED_GROUPS]
+    heights = [HEAD + BAR + LINE * len(w) + PAD for w in wrapped]
+    total = sum(heights)
+
+    fig, ax = plt.subplots(figsize=(8.6, total * 0.30))
+    counts = [len(c) for _, c in ADDED_GROUPS]
+
+    top = total
+    for (name, cols), shade, lines, h in zip(ADDED_GROUPS, GROUP_SHADES, wrapped, heights):
+        ax.text(0, top - HEAD, name, va="center", ha="left", fontsize=10.5,
+                fontweight="bold", color=INK)
+        y_bar = top - HEAD - BAR + 0.35
+        ax.barh(y_bar, len(cols), height=0.46, color=shade, zorder=3)
+        ax.text(len(cols) + 0.25, y_bar, str(len(cols)), va="center", ha="left",
+                fontsize=9.5, fontweight="bold", color=INK)
+        for j, line in enumerate(lines):
+            ax.text(0, y_bar - 0.55 - LINE * j, line, va="top", ha="left",
+                    fontsize=7.2, color=MUTED, family="monospace")
+        top -= h
+
+    ax.set_ylim(0, total)
+    ax.set_xlim(0, max(counts) + 1.5)
+    ax.set_yticks([])
+    ax.set_xlabel("Features added")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))   # counts, not 2.5 of a feature
+    ax.xaxis.grid(True, lw=.8, zorder=0)
+    ax.set_axisbelow(True)
+    ax.spines["left"].set_visible(False)
+    ax.set_title("The features the full-STATS19 model adds, by group\n"
+                 "Every one is recorded by an officer after the fact",
+                 loc="left", pad=12)
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out_path}")
+
+
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     n_d, d = score_dispatch()
@@ -227,6 +276,7 @@ def main():
 
     fig_gap(d, f, OUT_DIR / "fig1_leakage_gap.png")
     fig_budget(d, f, OUT_DIR / "fig2_feature_budget.png")
+    fig_groups(d, f, OUT_DIR / "fig3_added_features_by_group.png")
     with open(OUT_DIR / "leakage_audit_results.json", "w") as fh:
         json.dump({"dispatch": d, "full": f,
                    "gap": {k: f[k] - d[k] for k, _ in METRICS},
