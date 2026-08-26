@@ -1,15 +1,15 @@
 # Temporal Drift
 
-**What this measures:** Do accident severity patterns change over time? We train on 2016-2017 STATS19 data and test on 2024 to examine whether a model's predictive power degrades across a 7-year gap. This simulates a scenario where deployed classifiers become stale and are never updated.
+**What this measures:** Do accident severity patterns change over time? We train on 2016-2017 STATS19 data and test across all years (2016-2024) to examine whether a model's predictive power degrades over time. This shows how a model trained on older data performs on incident years beyond its training period.
 
-**Setup:** normalized variant, binary Slight-vs-Severe, Optuna-tuned hyperparameters, class-balanced sample weights. Compares against a control model trained on all years (mixed) and tested on 2024 data.
+**Setup:** normalized variant, binary Slight-vs-Severe, Optuna-tuned hyperparameters, class-balanced sample weights. Compares a drift model (trained on 2016-2017) against a control model (trained on all years) across all test years.
 
 ## Scripts (run from repo root, venv active)
 
 | Script | Does |
 |---|---|
-| `temporal_drift_test.py` | Trains on 2016-2017, tests on 2024. Compares against control (mixed years). Outputs CSV tables of metrics. |
-| `plot_temporal_drift.py` | Generates visualization from the saved CSVs. |
+| `temporal_drift_test.py` | Trains on 2016-2017, evaluates on all test years (2016-2024). Compares against control (trained on all years). Outputs CSV metrics. |
+| `plot_temporal_drift.py` | Generates visualization showing both models across all test years. |
 
 ```bash
 source .venv/bin/activate
@@ -21,9 +21,9 @@ python CODE/experiments/temporal_drift/plot_temporal_drift.py
 
 ### Key Finding: Minimal Drift Over 7 Years
 
-Training a classifier on 2016-2017 data and testing on 2024 data shows **small but measurable performance degradation:**
+Training a classifier on 2016-2017 data and testing on 2024 test data shows **small but measurable performance degradation** compared to a model trained on all years:
 
-| Metric | Drift Model | Control (2024) | Delta |
+| Metric | 2016-17 Model | All-Years Control | Delta |
 |---|---|---|---|
 | **Macro F1** | 0.7283 | 0.7440 | **-0.0157** |
 | **Balanced Acc** | 0.7301 | 0.7449 | **-0.0148** |
@@ -33,9 +33,9 @@ Training a classifier on 2016-2017 data and testing on 2024 data shows **small b
 
 **Interpretation:**
 - General discrimination ability (AUC) declines ~1.4 percentage points over 7 years
-- Recall for Severe class drops more (~3.7 points), suggesting the model becomes worse at catching serious accidents in newer data
-- Recall for Slight class actually improves slightly, indicating the model may be drifting toward higher precision on negative examples
-- Overall the drift is modest: **a 2016-2017 model remains reasonably useful on 2024 data**, though slightly less reliable than one trained on all years
+- Recall for Severe class drops more (~3.7 points), suggesting the model becomes worse at catching serious accidents in 2024
+- Recall for Slight class improves slightly, indicating drift toward higher precision on negative examples
+- Overall the drift is modest: **a 2016-2017 model remains reasonably useful on 2024 data**, though less reliable than one trained on all years
 
 ### Performance Across Test Years
 
