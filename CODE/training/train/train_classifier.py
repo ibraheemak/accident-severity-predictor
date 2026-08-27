@@ -215,9 +215,9 @@ BUNDLE_COLS = {
     # acquisition can only ever add information, never remove it.
     "road_environment": [
         "speed_limit", "urban_or_rural_area", "light_conditions",
-        "weather_conditions",
+        "weather_conditions", "pedestrian_crossing",
     ],
-    "junction": ["junction_detail", "junction_control", "pedestrian_crossing"],
+    "junction": ["junction_detail", "junction_control"],
     "crash_history": [
         "hist_acc_rate_500m", "hist_severe_frac_500m", "hist_fatal_rate_500m",
         "dist_to_nearest_hist_acc_m",
