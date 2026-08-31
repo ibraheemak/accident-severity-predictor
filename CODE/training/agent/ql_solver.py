@@ -169,33 +169,33 @@ class QLearner:
 
     def train(
         self,
-        X_test: pd.DataFrame,
-        y_test: pd.Series,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
         n_episodes: int = 100,
         show_progress: bool = True,
     ) -> Dict:
-        """Train Q-learner on test set.
+        """Train Q-learner on training set.
 
-        Each episode processes one collision's features (X_test row),
-        learns an acquisition policy for that specific collision.
+        Each episode processes one collision's features (X_train row) with
+        epsilon-greedy exploration and updates the Q-table.
 
         Args:
-            X_test: Feature matrix (rows are collisions)
-            y_test: Ground truth labels
-            n_episodes: Number of episodes (collisions) to train on
+            X_train: Feature matrix (rows are collisions)
+            y_train: Ground truth labels
+            n_episodes: Number of training episodes (collisions sampled with replacement)
             show_progress: Show progress bar
 
         Returns:
             Dictionary with training statistics
         """
-        n_samples = len(X_test)
+        n_samples = len(X_train)
         episode_indices = np.random.choice(n_samples, size=n_episodes, replace=True)
 
         pbar = tqdm(episode_indices, disable=not show_progress, desc="Training")
         for sample_idx in pbar:
             env = MDPEnvironment(
-                X_test.iloc[sample_idx],
-                y_test.iloc[sample_idx],
+                X_train.iloc[sample_idx],
+                y_train.iloc[sample_idx],
             )
             reward, length = self.train_episode(env)
             pbar.set_postfix({"return": f"{reward:.3f}", "steps": length})

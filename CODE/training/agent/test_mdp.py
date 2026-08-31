@@ -37,13 +37,24 @@ def test_environment():
     print(f"    Confidence: {state['max_proba']:.4f}")
     print(f"    Step reward: {reward:.4f}")
 
-    # Predict & terminate
+    # Predict & terminate (no acquisitions)
     env.reset()
     state, reward, done = env.step(0)
-    print(f"  After predict & terminate:")
+    print(f"  After predict & terminate (no acquisitions):")
     print(f"    Terminal reward: {reward:.4f}")
     print(f"    Is done: {done}")
-    print(f"    Episode info: {env.get_optimal_path_info()}")
+    info = env.get_optimal_path_info()
+    print(f"    n_steps: {info['n_steps']}, acquired: {info['acquired_bundles']}")
+
+    # Acquire multiple bundles, then predict
+    env.reset()
+    print(f"  Acquire bundles 0, 1, 2, then predict:")
+    for bundle_idx in [1, 2, 3]:
+        state, reward, done = env.step(bundle_idx)
+        print(f"    After bundle {bundle_idx-1}: confidence={state['max_proba']:.4f}, reward={reward:.4f}")
+    state, reward, done = env.step(0)  # Predict
+    info = env.get_optimal_path_info()
+    print(f"    Final: n_steps={info['n_steps']}, acquired={info['acquired_bundles']}, correct={info['is_correct']}")
     print("  ✓ MDPEnvironment tests passed\n")
 
 

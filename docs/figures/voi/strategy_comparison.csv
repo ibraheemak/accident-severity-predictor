@@ -1,0 +1,61 @@
+strategy,n_steps,reward,acquired_bundles,is_correct,final_confidence,y_pred,sample_idx
+predict_immediate,0,1.0,[],True,0.5128268599510193,0,3835
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.6427703499794006,1,3835
+greedy_confidence,2,0.0,"['vehicles', 'road_environment']",False,0.8504626154899597,1,3835
+predict_immediate,0,0.0,[],False,0.53315269947052,0,6457
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.5507187247276306,1,6457
+greedy_confidence,3,1.0,"['vehicles', 'casualties', 'road_environment', 'meteo']",True,0.808342456817627,1,6457
+predict_immediate,0,0.0,[],False,0.5135469436645508,1,5874
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.662379264831543,1,5874
+greedy_confidence,3,0.0,"['vehicles', 'casualties', 'road_environment', 'osm']",False,0.8107801079750061,1,5874
+predict_immediate,0,0.0,[],False,0.5524865388870239,0,7275
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.9021074771881104,1,7275
+greedy_confidence,4,1.0,"['vehicles', 'road_class', 'road_environment', 'crash_history']",True,0.8903294801712036,1,7275
+predict_immediate,0,0.0,[],False,0.513192355632782,0,4234
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.8627301454544067,1,4234
+greedy_confidence,2,1.0,['road_class'],True,0.8432164192199707,1,4234
+predict_immediate,0,1.0,[],True,0.6163849234580994,1,3541
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.9506688714027405,1,3541
+greedy_confidence,1,1.0,[],True,0.8413316011428833,1,3541
+predict_immediate,0,0.0,[],False,0.5370163917541504,0,3716
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.7189168930053711,0,3716
+greedy_confidence,2,0.0,"['vehicles', 'osm']",False,0.8024963736534119,0,3716
+predict_immediate,0,1.0,[],True,0.5238106846809387,0,1825
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.5263746976852417,1,1825
+greedy_confidence,10,0.0,"['casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.5263746976852417,1,1825
+predict_immediate,0,0.0,[],False,0.5329267978668213,0,461
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.6685101389884949,1,461
+greedy_confidence,2,1.0,"['vehicles', 'road_environment']",True,0.8511040210723877,1,461
+predict_immediate,0,0.0,[],False,0.6133880615234375,1,3548
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.6545838117599487,0,3548
+greedy_confidence,10,1.0,"['casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.6545838117599487,0,3548
+predict_immediate,0,0.0,[],False,0.5044508576393127,1,4489
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.6185449361801147,0,4489
+greedy_confidence,4,1.0,"['vehicles', 'crash_history', 'aadf', 'meteo']",True,0.8126999139785767,0,4489
+predict_immediate,0,0.0,[],False,0.5466786623001099,0,4774
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.5027749538421631,0,4774
+greedy_confidence,10,0.0,"['casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.5027749538421631,0,4774
+predict_immediate,0,0.0,[],False,0.6685892939567566,1,3645
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.6075059771537781,1,3645
+greedy_confidence,2,0.0,"['vehicles', 'crash_history']",False,0.81235671043396,1,3645
+predict_immediate,0,0.0,[],False,0.6427783370018005,1,2085
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.5632954239845276,1,2085
+greedy_confidence,2,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'osm']",False,0.8210423588752747,1,2085
+predict_immediate,0,0.0,[],False,0.5606228113174438,1,7032
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.802992045879364,1,7032
+greedy_confidence,3,0.0,"['vehicles', 'road_class', 'road_environment']",False,0.823522686958313,1,7032
+predict_immediate,0,0.0,[],False,0.5466786623001099,0,4348
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.6705577373504639,1,4348
+greedy_confidence,3,0.0,"['vehicles', 'road_class', 'aadf']",False,0.8113019466400146,0,4348
+predict_immediate,0,0.0,[],False,0.5395245552062988,0,5293
+full_acquisition,10,0.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",False,0.5999181866645813,0,5293
+greedy_confidence,2,0.0,"['vehicles', 'crash_history']",False,0.8364721536636353,0,5293
+predict_immediate,0,1.0,[],True,0.5398235321044922,0,515
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.8992611169815063,0,515
+greedy_confidence,2,1.0,"['vehicles', 'casualty_demographics']",True,0.8537227511405945,0,515
+predict_immediate,0,1.0,[],True,0.531978189945221,1,4735
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.8621383905410767,1,4735
+greedy_confidence,2,1.0,"['vehicles', 'road_environment']",True,0.9484360814094543,1,4735
+predict_immediate,0,1.0,[],True,0.5378902554512024,0,5875
+full_acquisition,10,1.0,"['vehicles', 'casualties', 'casualty_demographics', 'road_class', 'road_environment', 'junction', 'crash_history', 'aadf', 'osm', 'meteo']",True,0.9027988314628601,0,5875
+greedy_confidence,2,1.0,"['vehicles', 'casualty_demographics']",True,0.8389511704444885,0,5875

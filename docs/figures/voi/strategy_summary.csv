@@ -1,0 +1,4 @@
+strategy,n_samples,accuracy,mean_steps,mean_confidence,mean_reward
+full_acquisition,20,0.55,10.0,0.7084773987531662,0.55
+greedy_confidence,20,0.5,3.55,0.7970151156187057,0.5
+predict_immediate,20,0.3,0.0,0.5533873707056045,0.3
