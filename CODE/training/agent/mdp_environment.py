@@ -150,9 +150,9 @@ class MDPEnvironment:
             action: 0 to predict & terminate, or 1-10 to acquire bundle i-1
 
         Returns:
-            (new_state, reward_step, is_done)
+            (new_state, reward, is_done)
               - new_state: dict from get_state()
-              - reward_step: per-step reward (0 if non-terminal, or final reward if terminal)
+              - reward: α·ΔConfidence - C_i for acquisitions, or β·Accuracy for predict
               - is_done: True if action was predict & terminate
         """
         if self.is_terminal:
