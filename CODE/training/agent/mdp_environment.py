@@ -43,26 +43,23 @@ class MDPEnvironment:
         X_row: pd.Series,
         y_true: int,
         variant: str = "normalized",
-        task: str = "binary",
         model_cache_dir: Path = None,
     ):
         """Initialize the environment for one collision.
 
         Args:
             X_row: Feature row from a data split (all columns present, no NaNs)
-            y_true: Ground truth severity label (0 or 1 for binary)
-            variant: Data variant ("normalized", "raw", "masked")
-            task: Classification task ("binary" or "multiclass")
-            model_cache_dir: Path to models/subsets/<variant>_<task>/
+            y_true: Ground truth severity label (0 or 1 for binary Slight vs. Severe)
+            variant: Data variant (only "normalized" is supported)
+            model_cache_dir: Path to models/subsets/normalized_binary/
         """
         self.X_row = X_row.copy()
         self.y_true = y_true
         self.variant = variant
-        self.task = task
 
-        # Set model cache directory
+        # Set model cache directory (always normalized_binary)
         if model_cache_dir is None:
-            model_cache_dir = MODEL_DIR / "subsets" / f"{variant}_{task}"
+            model_cache_dir = MODEL_DIR / "subsets" / "normalized_binary"
         self.model_cache_dir = Path(model_cache_dir)
 
         # Initialize state: no bundles acquired yet (mask=0)

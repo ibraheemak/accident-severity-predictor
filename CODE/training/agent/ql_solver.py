@@ -35,8 +35,6 @@ class QLearner:
         step_weight: float = 1.0,
         terminal_weight: float = 1.0,
         bundle_costs: Dict[int, float] = None,
-        variant: str = "normalized",
-        task: str = "binary",
         seed: int = 42,
     ):
         """Initialize Q-learner.
@@ -48,8 +46,6 @@ class QLearner:
             step_weight: α parameter for step rewards (confidence improvement)
             terminal_weight: β parameter for terminal reward (accuracy)
             bundle_costs: Dict mapping bundle index (0-9) to acquisition cost
-            variant: Data variant ("normalized", "raw", "masked")
-            task: Classification task ("binary" or "multiclass")
             seed: Random seed for reproducibility
         """
         self.alpha = alpha
@@ -58,8 +54,6 @@ class QLearner:
         self.step_weight = step_weight
         self.terminal_weight = terminal_weight
         self.bundle_costs = bundle_costs or {i: 0.0 for i in range(10)}
-        self.variant = variant
-        self.task = task
         self.seed = seed
 
         # Q-table: Q[mask][action] = expected discounted future reward
@@ -202,8 +196,6 @@ class QLearner:
             env = MDPEnvironment(
                 X_test.iloc[sample_idx],
                 y_test.iloc[sample_idx],
-                variant=self.variant,
-                task=self.task,
             )
             reward, length = self.train_episode(env)
             pbar.set_postfix({"return": f"{reward:.3f}", "steps": length})
@@ -247,8 +239,6 @@ class QLearner:
             env = MDPEnvironment(
                 X_test.iloc[sample_idx],
                 y_test.iloc[sample_idx],
-                variant=self.variant,
-                task=self.task,
             )
             reward, info = self.evaluate_episode(env)
             returns.append(reward)
@@ -299,8 +289,6 @@ class QLearner:
                 "epsilon": float(self.epsilon),
                 "step_weight": float(self.step_weight),
                 "terminal_weight": float(self.terminal_weight),
-                "variant": self.variant,
-                "task": self.task,
             },
             "bundle_costs": {str(k): float(v) for k, v in self.bundle_costs.items()},
             "q_table": {

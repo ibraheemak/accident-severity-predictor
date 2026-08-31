@@ -4,7 +4,7 @@ Reinforcement Learning agent that decides which features to acquire before makin
 
 ## Overview
 
-The system is formulated as a Markov Decision Process (MDP):
+The system is formulated as a Markov Decision Process (MDP) over the **normalized, binary (Slight vs. Severe)** task:
 
 - **State**: Current acquisition mask (which of the 10 feature bundles have been acquired) + predicted class probabilities
 - **Actions**: Predict & terminate (return prediction) or acquire one of the 10 remaining bundles
@@ -14,6 +14,8 @@ The system is formulated as a Markov Decision Process (MDP):
   - Terminal: β·Accuracy(y_true, ŷ) (reward for correct prediction)
 
 The agent learns a policy that maps each acquisition state to the best next action, trading off confidence improvement against acquisition costs.
+
+**Note**: This implementation is hardcoded for the normalized, binary task. Raw and masked variants, as well as multiclass, are not supported.
 
 ## Components
 
@@ -70,21 +72,21 @@ python train_rl_agent.py \
 ```
 
 **Parameters:**
-- `--n-train`: Number of training episodes
-- `--n-eval`: Number of evaluation episodes
+- `--n-train`: Number of training episodes (default 1000)
+- `--n-eval`: Number of evaluation episodes (default 500)
 - `--alpha`: Learning rate (default 0.1)
 - `--gamma`: Discount factor (default 0.99)
 - `--epsilon`: Exploration rate (default 0.1)
 - `--step-weight`: Weight for per-step rewards (default 1.0)
 - `--terminal-weight`: Weight for terminal reward (default 1.0)
-- `--variant`: Data variant: `normalized` (default), `raw`, `masked`
-- `--task`: Task type: `binary` (default) or `multiclass`
 - `--output-dir`: Directory to save models (default `models/rl_agents`)
 - `--evaluate-only`: Load and evaluate an existing model
 
 **Output:**
-- `models/rl_agents/ql_<variant>_<task>_*.json`: Trained agent (Q-table)
-- `models/rl_agents/ql_<variant>_<task>_*_results.csv`: Evaluation results
+- `models/rl_agents/ql_normalized_binary_*.json`: Trained agent (Q-table)
+- `models/rl_agents/ql_normalized_binary_*_results.csv`: Evaluation results
+
+*Note: The agent always uses the normalized, binary (Slight vs. Severe) task. Variant and task are not configurable.*
 
 ### Test the environment
 

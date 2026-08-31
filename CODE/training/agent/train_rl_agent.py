@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Train and evaluate the RL Active Feature Acquisition agent.
 
-This script trains a Q-learning agent that learns when to acquire additional
-features (bundles) versus making a prediction. The agent learns to balance
-prediction accuracy against acquisition costs.
+This script trains a Q-learning agent on the normalized, binary (Slight vs. Severe)
+task. The agent learns when to acquire additional features (bundles) versus making
+a prediction, balancing accuracy against acquisition costs.
 
 Usage:
     python train_rl_agent.py                    # Train on 1000 samples
@@ -32,12 +32,6 @@ from ql_solver import QLearner
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--variant", default="normalized",
-                        choices=["normalized", "raw", "masked"],
-                        help="Data variant to use")
-    parser.add_argument("--task", default="binary",
-                        choices=["binary", "multiclass"],
-                        help="Classification task")
     parser.add_argument("--n-train", type=int, default=1000,
                         help="Number of training episodes")
     parser.add_argument("--n-eval", type=int, default=500,
@@ -63,19 +57,19 @@ def main():
     # Set up paths
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    model_name = (f"ql_{args.variant}_{args.task}_"
+    model_name = (f"ql_normalized_binary_"
                   f"a{args.alpha}_g{args.gamma}_e{args.epsilon}")
     model_path = output_dir / f"{model_name}.json"
 
-    # Load data
-    print(f"Loading {args.variant} {args.task} data...")
-    cols_all = bundle_feature_columns(BUNDLE_NAMES, args.variant)
+    # Load data (normalized, binary)
+    print("Loading normalized binary data...")
+    cols_all = bundle_feature_columns(BUNDLE_NAMES, "normalized")
 
-    train_df = load_split("train", cols_all, variant=args.variant)
-    X_train, y_train = prepare_xy(train_df, cols_all, binary=(args.task=="binary"))
+    train_df = load_split("train", cols_all, variant="normalized")
+    X_train, y_train = prepare_xy(train_df, cols_all, binary=True)
 
-    test_df = load_split("test", cols_all, variant=args.variant)
-    X_test, y_test = prepare_xy(test_df, cols_all, binary=(args.task=="binary"))
+    test_df = load_split("test", cols_all, variant="normalized")
+    X_test, y_test = prepare_xy(test_df, cols_all, binary=True)
 
     # Ensure categorical columns are properly typed
     unify_categorical_dtypes([X_train, X_test], cols_all)
@@ -90,8 +84,6 @@ def main():
         epsilon=args.epsilon,
         step_weight=args.step_weight,
         terminal_weight=args.terminal_weight,
-        variant=args.variant,
-        task=args.task,
         seed=args.seed,
     )
 

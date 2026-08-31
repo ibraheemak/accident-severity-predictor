@@ -89,9 +89,7 @@ class StrategyEvaluator:
             best_delta = -np.inf
 
             for action in env.get_acquirable_actions():
-                env_copy = MDPEnvironment(
-                    env.X_row, env.y_true, env.variant, env.task
-                )
+                env_copy = MDPEnvironment(env.X_row, env.y_true)
                 env_copy.current_mask = env.current_mask
                 env_copy._load_model(env.current_mask)
                 env_copy._update_proba()
@@ -159,10 +157,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n-samples", type=int, default=500,
                         help="Number of test samples to evaluate")
-    parser.add_argument("--variant", default="normalized",
-                        choices=["normalized", "raw", "masked"])
-    parser.add_argument("--task", default="binary",
-                        choices=["binary", "multiclass"])
     parser.add_argument("--rl-model", type=Path, default=None,
                         help="Path to trained RL model; if None, uses default")
     parser.add_argument("--output-dir", type=Path, default=Path("docs/figures/voi"),
@@ -174,18 +168,18 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load data
-    print(f"Loading {args.variant} {args.task} data...")
-    cols = bundle_feature_columns(BUNDLE_NAMES, args.variant)
-    test_df = load_split("test", cols, variant=args.variant)
-    X_test, y_test = prepare_xy(test_df, cols, binary=(args.task == "binary"))
+    # Load data (normalized binary)
+    print("Loading normalized binary data...")
+    cols = bundle_feature_columns(BUNDLE_NAMES, "normalized")
+    test_df = load_split("test", cols, variant="normalized")
+    X_test, y_test = prepare_xy(test_df, cols, binary=True)
     unify_categorical_dtypes([X_test], cols)
     print(f"  Loaded {len(X_test)} samples")
 
     # Load or initialize RL policy
     if args.rl_model:
         print(f"Loading RL model from {args.rl_model}...")
-        learner = QLearner(variant=args.variant, task=args.task)
+        learner = QLearner()
         learner.load(args.rl_model)
         rl_policy = learner.get_policy()
     else:
@@ -206,8 +200,7 @@ def main():
             "full_acquisition",
             "greedy_confidence",
         ]:
-            env = MDPEnvironment(X_test.iloc[idx], y_test.iloc[idx],
-                                 variant=args.variant, task=args.task)
+            env = MDPEnvironment(X_test.iloc[idx], y_test.iloc[idx])
 
             if strategy_name == "predict_immediate":
                 result = StrategyEvaluator.strategy_predict_immediate(env)
@@ -222,8 +215,7 @@ def main():
 
         # Learned policy (if available)
         if rl_policy:
-            env = MDPEnvironment(X_test.iloc[idx], y_test.iloc[idx],
-                                 variant=args.variant, task=args.task)
+            env = MDPEnvironment(X_test.iloc[idx], y_test.iloc[idx])
             result = StrategyEvaluator.strategy_learned_policy(env, rl_policy)
             result["sample_idx"] = idx
             results.append(result)
