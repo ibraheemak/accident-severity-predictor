@@ -28,6 +28,7 @@ from train_classifier import (
 
 from mdp_environment import MDPEnvironment
 from ql_solver import QLearner
+from bundle_costs import get_costs_dict, print_costs_summary
 
 
 def main():
@@ -77,6 +78,10 @@ def main():
     print(f"  Train: {len(X_train)} samples, {len(X_train.columns)} features")
     print(f"  Test: {len(X_test)} samples")
 
+    # Load realistic bundle costs
+    bundle_costs = get_costs_dict()
+    print_costs_summary()
+
     # Initialize learner
     learner = QLearner(
         alpha=args.alpha,
@@ -84,6 +89,7 @@ def main():
         epsilon=args.epsilon,
         step_weight=args.step_weight,
         terminal_weight=args.terminal_weight,
+        bundle_costs=bundle_costs,
         seed=args.seed,
     )
 
