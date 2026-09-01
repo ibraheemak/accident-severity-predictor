@@ -1,0 +1,16 @@
+{
+  "n_samples": 500,
+  "action_distribution": {
+    "7": 500,
+    "0": 500
+  },
+  "bundle_value_mean": {
+    "crash_history": 0.05385914444923401
+  },
+  "bundle_value_std": {
+    "crash_history": 0.07304850965738297
+  },
+  "bundle_value_count": {
+    "crash_history": 500
+  }
+}
