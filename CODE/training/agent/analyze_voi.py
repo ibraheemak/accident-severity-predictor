@@ -113,7 +113,7 @@ class StrategyEvaluator:
             "strategy": "greedy_confidence",
             "n_steps": steps,
             "reward": reward,
-            "acquired_bundles": mask_bundles(env.current_mask - (1 << 0)),  # Remove the predict step's effect
+            "acquired_bundles": mask_bundles(env.current_mask),
             "is_correct": info["is_correct"],
             "final_confidence": info["final_confidence"],
             "y_pred": info["y_pred"],

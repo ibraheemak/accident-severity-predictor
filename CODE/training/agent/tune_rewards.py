@@ -1,16 +1,27 @@
 #!/usr/bin/env python3
-"""Tune reward weights (α and β) to find optimal balance.
+"""Sweep lambda (the seconds->score exchange rate) and check the trained agent
+against the exact planner.
 
-Tests different α (step reward weight) and β (terminal reward weight)
-combinations and evaluates which gives best accuracy/cost trade-off.
+Lambda is the only reward parameter that changes what the optimal policy IS:
+it prices one second of acquisition time in accuracy points. beta just rescales
+the whole reward (policy-invariant), and alpha is exploration shaping whose
+per-episode contribution telescopes to alpha*(final - initial confidence). So
+tuning means picking lambda, and lambda is a deployment decision (how much is
+call-handler time worth?), not something to maximize.
 
-α: weight for per-step confidence improvement (acquisition benefit)
-β: weight for terminal accuracy (prediction correctness)
+What this script is FOR: verifying that the trained Q-learner actually reaches
+the score the exact DP planner says is achievable at each lambda. A large gap
+means the learner is under-trained or badly warm-started, not that lambda is
+wrong. Compare the "agent" column against "planner" -- they should be within
+sampling error of each other.
+
+Usage:
+    python tune_rewards.py
+    python tune_rewards.py --lambdas 0.002 0.01 0.05 --n-train 1000
 """
 
 import argparse
 from pathlib import Path
-from itertools import product
 
 import numpy as np
 import pandas as pd
@@ -25,103 +36,81 @@ from train_classifier import (
 
 from ql_solver import QLearner
 from bundle_costs import get_costs_dict
+from plan_optimal_policy import solve, trace_path, SWEEP_CSV
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--alpha-values", type=float, nargs="+",
-                        default=[0.5, 1.0, 2.0],
-                        help="α values to try (step reward weight)")
-    parser.add_argument("--beta-values", type=float, nargs="+",
-                        default=[0.5, 1.0, 2.0],
-                        help="β values to try (terminal reward weight)")
-    parser.add_argument("--n-train", type=int, default=500,
-                        help="Training episodes per configuration")
-    parser.add_argument("--n-eval", type=int, default=200,
-                        help="Evaluation episodes per configuration")
-    parser.add_argument("--output-dir", type=Path, default=Path("models/rl_agents/tuning"),
-                        help="Output directory")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--lambdas", type=float, nargs="+",
+                    default=[0.002, 0.01, 0.05, 0.2],
+                    help="score-points-per-second exchange rates to test")
+    ap.add_argument("--step-weight", type=float, default=0.05,
+                    help="alpha (confidence shaping); kept small on purpose")
+    ap.add_argument("--n-train", type=int, default=1500)
+    ap.add_argument("--n-eval", type=int, default=1000)
+    ap.add_argument("--no-warm-start", dest="warm_start", action="store_false",
+                    help="train from a zero Q-table instead of the DP solution")
+    ap.add_argument("--output-dir", type=Path,
+                    default=Path("models/rl_agents/lambda_sweep"))
+    args = ap.parse_args()
 
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load data once
-    print("Loading data...")
+    print("Loading data and bundle sweep...")
     cols = bundle_feature_columns(BUNDLE_NAMES, "normalized")
-    train_df = load_split("train", cols, variant="normalized")
-    X_train, y_train = prepare_xy(train_df, cols, binary=True)
-
-    test_df = load_split("test", cols, variant="normalized")
-    X_test, y_test = prepare_xy(test_df, cols, binary=True)
-
+    X_train, y_train = prepare_xy(
+        load_split("train", cols, variant="normalized"), cols, binary=True)
+    X_test, y_test = prepare_xy(
+        load_split("test", cols, variant="normalized"), cols, binary=True)
     unify_categorical_dtypes([X_train, X_test], cols)
 
-    bundle_costs = get_costs_dict()
+    sweep = pd.read_csv(SWEEP_CSV).set_index("mask")
+    valid_acc = sweep["valid_accuracy"].to_dict()
+    seconds = get_costs_dict()
 
-    # Grid search
-    results = []
-    configs = list(product(args.alpha_values, args.beta_values))
+    rows = []
+    for lam in tqdm(args.lambdas, desc="lambda sweep"):
+        costs = {i: s * lam for i, s in seconds.items()}
 
-    print(f"\nTesting {len(configs)} configurations...")
-    print(f"  α (step weight): {args.alpha_values}")
-    print(f"  β (terminal weight): {args.beta_values}")
-    print(f"  Train: {args.n_train} episodes, Eval: {args.n_eval} episodes\n")
+        # Exact planner: what is achievable at this lambda.
+        _, A = solve(valid_acc, lam, seconds)
+        planner_mask, planner_order = trace_path(A)
 
-    for alpha, beta in tqdm(configs, desc="Tuning"):
-        # Train
-        learner = QLearner(
-            alpha=0.1,  # learning rate, not the reward weight
-            gamma=0.99,
-            epsilon=0.1,
-            step_weight=alpha,  # This is the α parameter
-            terminal_weight=beta,  # This is the β parameter
-            bundle_costs=bundle_costs,
-        )
+        # Trained agent.
+        learner = QLearner(alpha=0.1, gamma=0.99, epsilon=0.1,
+                           step_weight=args.step_weight, terminal_weight=1.0,
+                           bundle_costs=costs)
+        if args.warm_start:
+            learner.warm_start(valid_acc)
+        learner.train(X_train, y_train, n_episodes=args.n_train,
+                      show_progress=False)
+        ev = learner.evaluate(X_test, y_test, n_episodes=args.n_eval,
+                              show_progress=False)
 
-        learner.train(X_train, y_train, n_episodes=args.n_train, show_progress=False)
+        learner.save(args.output_dir / f"ql_lambda{lam}.json")
 
-        # Evaluate
-        eval_stats = learner.evaluate(X_test, y_test, n_episodes=args.n_eval, show_progress=False)
-
-        results.append({
-            "alpha": alpha,
-            "beta": beta,
-            "accuracy": eval_stats["accuracy"],
-            "mean_return": eval_stats["mean_return"],
-            "mean_steps": eval_stats["mean_steps"],
-            "mean_confidence": eval_stats["mean_confidence"],
+        rows.append({
+            "lambda": lam,
+            "planner_bundles": len(planner_order),
+            "planner_seconds": round(sum(seconds[i] for i in planner_order), 3),
+            "planner_test_acc": round(sweep.loc[planner_mask, "test_accuracy"], 4),
+            "agent_bundles": round(ev["mean_steps"], 2),
+            "agent_test_acc": round(ev["accuracy"], 4),
+            "gap": round(ev["accuracy"] - sweep.loc[planner_mask, "test_accuracy"], 4),
         })
 
-    # Results to DataFrame
-    df_results = pd.DataFrame(results)
-    df_results = df_results.sort_values("accuracy", ascending=False)
+    table = pd.DataFrame(rows)
+    print("\n" + "=" * 90)
+    print("LAMBDA SWEEP -- trained agent vs exact planner")
+    print("=" * 90)
+    print(table.to_string(index=False))
 
-    # Print results
-    print("\n" + "=" * 80)
-    print("REWARD WEIGHT TUNING RESULTS")
-    print("=" * 80)
-    print(df_results.to_string(index=False))
-
-    # Save results
-    results_path = output_dir / "tuning_results.csv"
-    df_results.to_csv(results_path, index=False)
-    print(f"\nResults saved to {results_path}")
-
-    # Best configuration
-    best = df_results.iloc[0]
-    print(f"\nBest configuration:")
-    print(f"  α={best['alpha']:.1f}, β={best['beta']:.1f}")
-    print(f"  Accuracy: {best['accuracy']:.4f}")
-    print(f"  Mean return: {best['mean_return']:.4f}")
-    print(f"  Mean steps: {best['mean_steps']:.2f}")
-
-    # Recommendation
-    print("\nTo train with best configuration:")
-    print(f"  python train_rl_agent.py \\")
-    print(f"    --n-train 2000 \\")
-    print(f"    --step-weight {best['alpha']:.1f} \\")
-    print(f"    --terminal-weight {best['beta']:.1f}")
+    out = args.output_dir / "lambda_sweep.csv"
+    table.to_csv(out, index=False)
+    print(f"\nSaved to {out}")
+    print("\n'gap' near 0 means the learner reached the planner's optimum. "
+          "Large negative gaps mean under-training, not a bad lambda.")
 
 
 if __name__ == "__main__":

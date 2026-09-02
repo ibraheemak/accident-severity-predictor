@@ -38,12 +38,21 @@ class MDPEnvironment:
     acquisition subsets.
     """
 
+    # Class-level model cache shared by every environment instance: the 1024
+    # subset classifiers are read-only at inference time, so one loaded copy
+    # per mask serves all episodes (loading from disk on every step dominated
+    # runtime before this cache).
+    _model_cache: dict = {}
+
     def __init__(
         self,
         X_row: pd.Series,
         y_true: int,
         variant: str = "normalized",
         model_cache_dir: Path = None,
+        step_weight: float = 1.0,
+        terminal_weight: float = 1.0,
+        bundle_costs: dict = None,
     ):
         """Initialize the environment for one collision.
 
@@ -52,10 +61,17 @@ class MDPEnvironment:
             y_true: Ground truth severity label (0 or 1 for binary Slight vs. Severe)
             variant: Data variant (only "normalized" is supported)
             model_cache_dir: Path to models/subsets/normalized_binary/
+            step_weight: α — weight on ΔConfidence in the per-step reward
+            terminal_weight: β — weight on accuracy in the terminal reward
+            bundle_costs: {bundle_index: cost} C_i subtracted per acquisition;
+                None means all costs are 0
         """
         self.X_row = X_row.copy()
         self.y_true = y_true
         self.variant = variant
+        self.step_weight = step_weight
+        self.terminal_weight = terminal_weight
+        self.bundle_costs = bundle_costs if bundle_costs is not None else {}
 
         # Set model cache directory (always normalized_binary)
         if model_cache_dir is None:
@@ -75,10 +91,14 @@ class MDPEnvironment:
         self.is_terminal = False
 
     def _load_model(self, mask: int):
-        """Load XGBoost model for a given acquisition subset mask."""
-        model_path = self.model_cache_dir / f"{mask:03d}.json"
-        self.current_model = xgb.XGBClassifier()
-        self.current_model.load_model(str(model_path))
+        """Load XGBoost model for a given acquisition subset mask (cached)."""
+        key = (str(self.model_cache_dir), mask)
+        model = MDPEnvironment._model_cache.get(key)
+        if model is None:
+            model = xgb.XGBClassifier()
+            model.load_model(str(self.model_cache_dir / f"{mask:03d}.json"))
+            MDPEnvironment._model_cache[key] = model
+        self.current_model = model
 
     def _get_model_features(self, mask: int) -> list[str]:
         """Feature columns needed for a given mask."""
@@ -200,48 +220,18 @@ class MDPEnvironment:
         self,
         delta_confidence: float,
         bundle_idx: int,
-        alpha: float = 1.0,
-        costs: dict = None,
     ) -> float:
-        """Compute per-step reward (before terminal action).
+        """Per-step reward: α·ΔConfidence - C_i, using the α and costs this
+        environment was constructed with."""
+        cost = self.bundle_costs.get(bundle_idx, 0.0)
+        return self.step_weight * delta_confidence - cost
 
-        Reward = α·ΔConfidence - C_i
-
-        Args:
-            delta_confidence: Change in max predicted probability
-            bundle_idx: Index of acquired bundle (0-9)
-            alpha: Weight for confidence improvement
-            costs: Dict mapping bundle index to cost; if None, all costs are 0
-
-        Returns:
-            Step reward value
-        """
-        if costs is None:
-            costs = {i: 0.0 for i in range(N_BUNDLES)}
-
-        cost = costs.get(bundle_idx, 0.0)
-        reward = alpha * delta_confidence - cost
-        return reward
-
-    def _compute_terminal_reward(
-        self,
-        beta: float = 1.0,
-    ) -> float:
-        """Compute terminal reward (predict & terminate action).
-
-        Reward = β·Accuracy(y_true, ŷ)
-
-        Accuracy is 1 if predicted class matches true class, 0 otherwise.
-
-        Args:
-            beta: Weight for accuracy
-
-        Returns:
-            Terminal reward value
-        """
+    def _compute_terminal_reward(self) -> float:
+        """Terminal reward: β·Accuracy(y_true, ŷ), using the β this
+        environment was constructed with. Accuracy is 1 if the predicted
+        class matches the true class, 0 otherwise."""
         y_pred = self.current_proba.argmax()
-        accuracy = float(y_pred == self.y_true)
-        return beta * accuracy
+        return self.terminal_weight * float(y_pred == self.y_true)
 
     def get_optimal_path_info(self) -> dict:
         """Return information about the episode once it's terminal.

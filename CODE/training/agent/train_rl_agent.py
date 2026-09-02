@@ -47,6 +47,12 @@ def main():
                         help="α parameter for step rewards")
     parser.add_argument("--terminal-weight", type=float, default=1.0,
                         help="β parameter for terminal reward")
+    parser.add_argument("--cost-scale", type=float, default=1.0,
+                        help="lambda: multiplier converting bundle seconds into "
+                             "reward units (calibrate with plan_optimal_policy.py)")
+    parser.add_argument("--warm-start", action="store_true",
+                        help="seed the Q-table from the exact DP solution over "
+                             "the bundle-sweep valid accuracies (plan-then-learn)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
     parser.add_argument("--output-dir", type=Path, default=Path("models/rl_agents"),
@@ -59,7 +65,7 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     model_name = (f"ql_normalized_binary_"
-                  f"a{args.alpha}_g{args.gamma}_e{args.epsilon}")
+                  f"a{args.alpha}_g{args.gamma}_e{args.epsilon}_c{args.cost_scale}")
     model_path = output_dir / f"{model_name}.json"
 
     # Load data (normalized, binary)
@@ -78,9 +84,10 @@ def main():
     print(f"  Train: {len(X_train)} samples, {len(X_train.columns)} features")
     print(f"  Test: {len(X_test)} samples")
 
-    # Load realistic bundle costs
-    bundle_costs = get_costs_dict()
+    # Load realistic bundle costs (seconds), scaled into reward units by lambda
+    bundle_costs = {i: c * args.cost_scale for i, c in get_costs_dict().items()}
     print_costs_summary()
+    print(f"Cost scale (lambda): {args.cost_scale} reward units per second")
 
     # Initialize learner
     learner = QLearner(
@@ -92,6 +99,14 @@ def main():
         bundle_costs=bundle_costs,
         seed=args.seed,
     )
+
+    if args.warm_start:
+        sweep_csv = Path("docs/figures/bundle_sweep/bundle_sweep_normalized_binary.csv")
+        sweep = pd.read_csv(sweep_csv).set_index("mask")
+        terminal_values = (args.terminal_weight * sweep["valid_accuracy"]).to_dict()
+        learner.warm_start(terminal_values)
+        print(f"Warm-started Q-table from exact DP over {len(sweep)} masks "
+              f"({sweep_csv})")
 
     if args.evaluate_only:
         print(f"\nLoading model from {model_path}...")

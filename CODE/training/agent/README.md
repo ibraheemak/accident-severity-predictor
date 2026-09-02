@@ -1,350 +1,172 @@
 # Active Feature Acquisition Agent
 
-Reinforcement Learning agent that decides which features to acquire before making a severity prediction, balancing prediction accuracy against acquisition costs.
+An agent that decides *which information to acquire* before predicting collision severity, trading prediction accuracy against the real time cost of acquiring each piece of information.
 
-## Overview
+Task: **normalized** data variant, **binary** Slight vs. Severe. Raw/masked variants and the 3-class task are not supported here.
 
-The system is formulated as a Markov Decision Process (MDP) over the **normalized, binary (Slight vs. Severe)** task:
+---
 
-- **State**: Current acquisition mask (which of the 10 feature bundles have been acquired) + predicted class probabilities
-- **Actions**: Predict & terminate (return prediction) or acquire one of the 10 remaining bundles
-- **Transitions**: Acquiring bundle i loads the pre-trained classifier for the new mask
-- **Rewards**: 
-  - Per-step: α·ΔConfidence - C_i (reward for confidence improvement, penalize acquisition cost)
-  - Terminal: β·Accuracy(y_true, ŷ) (reward for correct prediction)
+## The MDP
 
-The agent learns a policy that maps each acquisition state to the best next action, trading off confidence improvement against acquisition costs.
+- **State** — the acquisition mask (which of the 10 bundles are held) plus the current classifier's predicted probabilities.
+- **Actions** — `0` predict & terminate, or `1..10` acquire bundle `action-1`.
+- **Transitions** — deterministic. Acquiring bundle *i* sets bit *i* and loads the pre-trained classifier for the new mask from `models/subsets/normalized_binary/`.
+- **Reward** —
 
-**Note**: This implementation is hardcoded for the normalized, binary task. Raw and masked variants, as well as multiclass, are not supported.
+  ```
+  per acquisition step :   α · ΔConfidence  −  λ · seconds_i
+  on predict & terminate:  β · Accuracy(ŷ, y)
+  ```
 
-## Components
+### The three reward parameters, and which one actually matters
 
-### `mdp_environment.py`
+This is the part that is easy to get wrong, so it is worth being precise.
 
-Implements the MDP environment. Manages:
-- State transitions (acquiring bundles)
-- Model loading from the pre-trained classifier cache
-- Prediction and reward computation
-- Episode bookkeeping
+| | what it scales | changes the optimal policy? |
+|---|---|---|
+| **β** `--terminal-weight` | value of a correct prediction | **No.** Scaling β, α and λ together by any constant leaves the policy identical — only ratios matter. Fix β = 1. |
+| **λ** `--cost-scale` | price of one second of acquisition time, *in accuracy points* | **Yes — this is the real knob.** |
+| **α** `--step-weight` | shaping bonus for confidence gained | Barely. Summed over an episode the ΔConfidence terms telescope to `α·(final − initial confidence)`, so α nudges the agent toward confident stopping states and helps exploration, but does not redefine the objective. Keep it small (0.05). |
 
-**Key classes:**
-- `MDPEnvironment`: One-collision environment instance
+So there is really **one** parameter: **λ**.
 
-**Example:**
-```python
-from mdp_environment import MDPEnvironment
+**What λ means.** Every acquisition is a trade — "spend 2 seconds asking the caller about casualties, gain 9.6 accuracy points; worth it?" You cannot answer that without an exchange rate between seconds and accuracy points. λ *is* that exchange rate, in units of *accuracy points per second*.
 
-env = MDPEnvironment(X_row, y_true)
-state = env.get_state()
-state, reward, done = env.step(1)  # Acquire bundle 0
-```
+- `λ = 0.01` → a second costs 1 percentage point. The 2-second casualties question buys +9.6 points for 2 points of cost: clearly worth it. The agent acquires generously.
+- `λ = 0.1` → a second costs 10 points. That same question now costs 20 points to gain 9.6: a bad trade. Only the millisecond-cheap map and API lookups survive.
+- `λ = 0` → time is free; acquire anything that helps at all.
 
-### `ql_solver.py`
+λ is **not** a value to be maximized — it is a deployment decision about how much a 999 call-handler's time is worth. Each λ yields a different, equally correct policy. `plan_optimal_policy.py` sweeps λ and hands you the menu; you pick the row whose time budget matches reality.
 
-Tabular Q-learning solver. Learns an optimal policy over the 1024-state space (2^10 acquisition subsets).
+---
 
-**Key classes:**
-- `QLearner`: Q-learning agent with epsilon-greedy exploration
-
-**Example:**
-```python
-from ql_solver import QLearner
-
-learner = QLearner(alpha=0.1, gamma=0.99, epsilon=0.1)
-learner.train(X_train, y_train, n_episodes=1000)
-results = learner.evaluate(X_test, y_test)
-policy = learner.get_policy()  # Extract learned policy
-```
-
-## Quick Start
-
-### Full Evaluation Pipeline (10 minutes)
+## Quick start
 
 ```bash
-# Train, analyze, tune, and visualize everything
-bash full_evaluation.sh
-```
+# 1. Solve the MDP exactly and see the accuracy/time menu
+python CODE/training/agent/plan_optimal_policy.py
 
-This runs:
-1. ✅ Train agent on 1000 episodes
-2. ✅ Analyze what bundles it prefers
-3. ✅ Test 9 reward weight configurations
-4. ✅ Compare against baselines
-5. ✅ Generate publication-quality plots
+# 2. Train at your chosen lambda, warm-started from that exact solution
+python CODE/training/agent/train_rl_agent.py \
+  --warm-start --cost-scale 0.01 --step-weight 0.05 \
+  --n-train 1500 --n-eval 1000 --output-dir models/rl_agents/warmstart
 
-Outputs go to `docs/figures/` and `models/rl_agents/tuning/`
-
-### Quick Validation (2 minutes)
-
-```bash
-# Train and check if agent learns
-python train_rl_agent.py --n-train 500 --n-eval 200
-python analyze_policy.py --rl-model models/rl_agents/*.json --n-samples 200
+# Or run everything
+LAMBDA=0.01 bash CODE/training/agent/full_evaluation.sh
 ```
 
 ---
 
-## Usage
+## Plan-then-learn
 
-### Train and evaluate an agent
+The mask-level MDP is **fully known in advance**: transitions are deterministic, and the expected terminal reward of stopping at any mask is that subset classifier's accuracy — already measured for all 1024 masks by `bundle_sweep.py`. So it can be solved in closed form by dynamic programming over the subset lattice:
 
-```bash
-python train_rl_agent.py \
-  --n-train 1000 \
-  --n-eval 500 \
-  --step-weight 1.0 \
-  --terminal-weight 1.0
+```
+V(m) = max( score(m),                                  # stop and predict
+            max over i∉m [ −λ·seconds_i + V(m ∪ {i}) ] )  # acquire i
 ```
 
-**Parameters:**
-- `--n-train`: Training episodes (default 1000)
-- `--n-eval`: Evaluation episodes (default 500)
-- `--alpha`: Learning rate (default 0.1)
-- `--gamma`: Discount factor (default 0.99)
-- `--epsilon`: Exploration rate (default 0.1)
-- `--step-weight`: Weight for per-step confidence rewards α (default 1.0)
-- `--terminal-weight`: Weight for terminal accuracy reward β (default 1.0)
-- `--output-dir`: Save directory (default `models/rl_agents`)
+`plan_optimal_policy.py` does exactly this and sweeps λ to produce the Pareto frontier. Planning uses **valid** metrics (choosing a subset on test would leak); the table reports **test** metrics for the chosen subsets.
 
-**Output:**
-- `models/rl_agents/ql_normalized_binary_*.json`: Trained agent (Q-table)
-- `models/rl_agents/ql_normalized_binary_*_results.csv`: Evaluation results
+**Two details that are easy to misread in this recursion.**
 
-### Analyze what the agent learned
+*Where did α·ΔConfidence go?* It is deliberately absent, for two reasons. Practically, ΔConfidence is per-collision (it depends on `X_row`), while the planner reasons about per-mask aggregates over the whole split — there is no single ΔConfidence for a mask transition. More fundamentally, it would not change the answer: summed over an episode the shaping terms telescope to `α·(Conf(m_T) − Conf(m_0))`, and `Conf(m_0)` is the same constant for every policy, so the term reduces to a bonus `α·Conf(m_T)` on the final state alone. That is potential-based shaping with Φ = confidence, which is policy-invariant at γ=1. α's job is guiding *exploration* during learning; the planner enumerates rather than explores, so it has no job there.
 
-```bash
-python analyze_policy.py \
-  --rl-model models/rl_agents/ql_normalized_binary_a0.1_g0.99_e0.1.json \
-  --n-samples 500
-```
+*Why is there no γ here, when `warm_start()` has one?* Because they answer different questions, and both are right for their own. The planner reports the true undiscounted frontier — only the final mask determines the score and acquisition order does not change it, so discounting would penalise longer paths for no reason. `QLearner.warm_start()` instead has to seed Q-values on the same scale the learner will bootstrap with (γ=0.99), or the seed and the first TD updates would fight each other. Consequence worth knowing: γ¹⁰ ≈ 0.90, so a full-depth path is seeded about 10% low, biasing the warm start slightly toward shorter acquisition sequences than the exact optimum.
 
-Shows:
-- Which bundles the agent acquires
-- Value-of-information per bundle
-- How often each bundle is used
-
-Example output:
-```
-Value-of-Information per Bundle:
-  [8] osm                  +0.0623 ± 0.0456  (acquired   250 times)
-  [9] meteo                +0.0412 ± 0.0389  (acquired   180 times)
-  [7] aadf                 +0.0198 ± 0.0134  (acquired    85 times)
-  [0] vehicles             -0.0012 ± 0.0089  (acquired    12 times)
-```
-
-### Tune reward weights (α, β)
-
-```bash
-python tune_rewards.py \
-  --alpha-values 0.5 1.0 2.0 \
-  --beta-values 0.5 1.0 2.0 \
-  --n-train 500
-```
-
-Tests different reward configurations and recommends the best one based on accuracy.
-
-### Compare against baselines
-
-```bash
-python analyze_voi.py \
-  --n-samples 1000 \
-  --rl-model models/rl_agents/ql_normalized_binary_*.json
-```
-
-Compares learned policy against:
-- **Predict immediately**: No acquisitions (baseline accuracy)
-- **Full acquisition**: Acquire all bundles (upper bound)
-- **Greedy confidence**: Acquire until confidence > 0.8
-- **Learned policy**: Your trained agent
-
-### Visualize results
-
-```bash
-python visualize_voi.py \
-  --results-csv docs/figures/voi/strategy_comparison.csv \
-  --policy-analysis-json docs/figures/policy_analysis/policy_analysis.json
-```
-
-Generates:
-- Bundle costs by tier
-- Accuracy vs acquisition cost curves
-- Value-of-information rankings
-
-### Test the environment
-
-```bash
-python test_mdp.py
-```
-
-Verifies MDP environment and Q-learner work correctly.
-
-## Architecture Details
-
-### The 10 Acquisition Bundles
-
-| Bundle | Kind | Features | Cost Tier |
-|--------|------|----------|-----------|
-| vehicles | Ask caller | number_of_vehicles, vehicle type flags | ask_caller |
-| casualties | Ask caller | n_casualties, pedestrian/driver/etc counts | ask_caller |
-| casualty_demographics | Ask caller | Age ranges, female/child/elderly counts | ask_caller |
-| road_class | Map lookup | Road class, numbers, type, trunk flag | map_lookup |
-| road_environment | Map lookup | Speed limit, urban/rural, light, weather | map_lookup |
-| junction | Map lookup | Junction detail, control | map_lookup |
-| crash_history | Map lookup | Historical accident rate/severity/distance | map_lookup |
-| aadf | External API | Annual Average Daily Flow, distance | external_api |
-| osm | External API | Traffic signals, calming, lane count | external_api |
-| meteo | External API | Temperature, precipitation, wind, weather code | external_api |
-
-Bundle order (0-9) is the bit order in the acquisition mask — do not reorder without invalidating all cached models.
-
-### Model Cache
-
-The RL environment uses pre-trained classifiers cached in:
-```
-models/subsets/normalized_binary/000.json  (free info only, timestamp)
-                                  001.json  (bundle 0 acquired)
-                                  ...
-                                  1023.json (all 10 bundles acquired)
-```
-
-All 1024 classifiers are pre-trained once by `bundle_sweep.py` and reused by the RL agent. No model training happens at runtime — only inference.
-
-### Q-Learning Details
-
-**State space:** 1024 states (one per acquisition bitmask)
-**Action space:** 11 actions (predict, or acquire one of 10 bundles)
-**Update rule:** Standard tabular Q-learning with epsilon-greedy exploration
-**Convergence:** Guaranteed since state/action spaces are finite and transitions are deterministic
-
-The learner updates the Q-table during training:
-```
-Q[s][a] ← Q[s][a] + α · (r + γ·max Q[s'][a'] - Q[s][a])
-```
-
-At evaluation time, it uses the greedy policy:
-```
-π(s) = argmax_a Q[s][a]
-```
-
-## What's New (vs Initial Implementation)
-
-✅ **Realistic Bundle Costs** — Set based on real-world latencies:
-- External APIs: 10-30ms (cheapest)
-- Map lookups: 40-60ms (medium)
-- Caller questions: 1-3 seconds (most expensive)
-
-✅ **Reward Tuning** — Tools to find optimal α, β parameters:
-- `tune_rewards.py`: Grid search over configurations
-- Outputs ranked results with recommendations
-
-✅ **Policy Analysis** — Understand what the agent learned:
-- `analyze_policy.py`: Shows bundle value-of-information
-- `analyze_voi.py`: Compares against baselines
-
-✅ **Visualizations** — Publication-quality plots:
-- `visualize_voi.py`: Cost/accuracy trade-offs
-- Bundle value rankings
-- Strategy comparisons
-
-✅ **Evaluation Guide** — Complete workflow documentation:
-- `EVALUATION.md`: Usage patterns, troubleshooting, expected results
+`--warm-start` seeds the Q-table with that DP solution, so training refines a correct policy instead of trying to discover a specific 5-step acquisition path from noisy 0/1 terminal rewards. This is what took the agent from 0.597 to 0.70+ accuracy — cold-start Q-learning plateaus at one bundle because random exploration almost never stumbles onto a good multi-bundle sequence.
 
 ---
 
-## Key Design Decisions
+## Results
 
-1. **Tabular Q-learning**: The state space (1024 states) is small enough for exact tabular representation. No function approximation needed.
+Exact frontier (`plan_optimal_policy.py`, planning on valid, reporting test):
 
-2. **Deterministic transitions**: The MDP is fully observable — there's no randomness in transitions. The agent's only uncertainty is about optimal actions.
+| λ | bundles acquired | time | test F1 |
+|---|---|---|---|
+| 0.002 | 9 — all except `meteo` | 6.23 s | **0.7371** |
+| 0.01 | vehicles, casualties, road_environment, junction, crash_history | 3.15 s | 0.7088 |
+| 0.05 | vehicles, road_environment, junction, crash_history, osm | 1.16 s | 0.6855 |
+| 0.1 | road_environment, crash_history, aadf | 0.13 s | 0.6381 |
+| 1.0 | osm only | 0.01 s | 0.5828 |
 
-3. **No per-sample training data**: The agent trains on random samples from the training set. Each sample is independent; there's no sequential decision-making over time.
+Baseline (timestamp only, mask 0) is **0.5408** test F1. Full acquisition is 0.7374 — note the optimum **excludes `meteo`**, which is net harmful.
 
-4. **Pre-trained model cache**: All classification models are pre-trained offline. The agent only does inference and policy learning, not model training.
+Trained agents (1000 eval episodes):
 
-5. **Episodic structure**: Each collision's features form one episode. The agent acquires bundles until it terminates with a prediction.
+| setup | accuracy |
+|---|---|
+| broken rewards (pre-fix, see below) | 0.55 – 0.63 |
+| fixed rewards, cold start | 0.597 |
+| warm start, λ = 0.01 | **0.700** |
+| warm start, λ = 0.002 | **0.712** |
 
-6. **Realistic costs**: Bundle costs reflect actual dispatch center latencies. Agent learns to prefer cheap bundles when benefit is similar.
+### A bug worth knowing about
 
-## Bundle Acquisition Costs
+Until 1 Sept 2026 `MDPEnvironment.step()` never passed the learner's α, β or bundle costs into the reward functions — it silently used the method defaults (α=1, β=1, **all costs 0**). Every reward-tuning experiment before that date was measuring nothing; identical results across configurations were the symptom. Any tuning conclusion recorded before that fix should be discarded.
 
-Realistic costs are set in [bundle_costs.py](bundle_costs.py):
+### Current limitation
 
-**Ask Caller (Most Expensive):**
-- vehicles: 1.0 sec
-- casualties: 2.0 sec
-- casualty_demographics: 3.0 sec (hardest question)
+The state is only the acquisition mask, so the learned policy is **the same for every collision** — it acquires one fixed subset every time. That is a well-chosen *static* subset, not active acquisition: the RL currently reproduces the planner rather than beating it, and 0.737 is the ceiling for any fixed subset.
 
-**Map Lookup (Medium):**
-- junction: 40 ms
-- road_class: 50 ms
-- road_environment: 50 ms
-- crash_history: 60 ms (radius query)
-
-**External API (Cheapest):**
-- osm: 10 ms
-- aadf: 20 ms
-- meteo: 30 ms
-
-The agent learns to prefer cheap bundles (external APIs) over expensive ones (caller questions) when the benefit is similar.
+To go beyond it the state needs the **current prediction confidence**, so the agent can stop early when the free-information model is already sure and keep acquiring when it is not. That per-collision adaptivity is the only route past 0.737, and it is the natural next piece of work.
 
 ---
 
-## Evaluation & Tuning
+## The 10 bundles
 
-See [EVALUATION.md](EVALUATION.md) for:
-- Complete evaluation workflow
-- How to interpret results
-- Troubleshooting guide
-- Expected performance ranges
-- Parameter tuning strategies
+| # | Bundle | Kind | Seconds | Features |
+|---|--------|------|---------|----------|
+| 0 | vehicles | ask caller | 1.0 | vehicle count + 7 type flags |
+| 1 | casualties | ask caller | 2.0 | counts by pedestrian/driver/passenger/cyclist |
+| 2 | casualty_demographics | ask caller | 3.0 | ages, child/elderly/female counts |
+| 3 | road_class | map lookup | 0.050 | road class & number, type, trunk flag |
+| 4 | road_environment | map lookup | 0.050 | speed limit, urban/rural, light, weather, crossing |
+| 5 | junction | map lookup | 0.040 | junction detail & control |
+| 6 | crash_history | map lookup | 0.060 | prior-year rates within 500 m |
+| 7 | aadf | external API | 0.020 | traffic flow, distance to count point |
+| 8 | osm | external API | 0.010 | signals, calming, lanes, median, camera |
+| 9 | meteo | external API | 0.030 | temperature, precipitation, wind, weather code |
 
-Quick summary:
-- `tune_rewards.py`: Grid search over α, β
-- `analyze_policy.py`: Understand what agent learned
-- `analyze_voi.py`: Compare against baselines
-- `visualize_voi.py`: Generate plots
-- `full_evaluation.sh`: Run everything
+Only the call timestamp is free. **Bundle order is the bitmask bit order** — reordering invalidates every cached model in `models/subsets/`.
 
----
-
-## Limitations and Future Work
-
-1. **Reward function tuning**: The α and β parameters can be tuned with `tune_rewards.py`. See [EVALUATION.md](EVALUATION.md) for workflow.
-
-2. **Multi-sample training**: Currently each episode is independent. Future work could train a policy optimal for a batch of collisions simultaneously.
-
-3. **Function approximation**: If action space grows beyond 10 bundles, tabular Q-learning won't scale. A neural network policy could handle that.
-
-4. **Exploration strategies**: Currently uses epsilon-greedy. Could try UCB or other strategies if exploration is a bottleneck.
-
-5. **Cost recalibration**: Bundle costs in [bundle_costs.py](bundle_costs.py) should be validated against actual dispatch center measurements.
-
-## File Reference
-
-**Core Implementation:**
-- [mdp_environment.py](mdp_environment.py) — MDP state/action/reward logic
-- [ql_solver.py](ql_solver.py) — Q-learning algorithm
-- [bundle_costs.py](bundle_costs.py) — Acquisition costs by bundle
-
-**Training & Evaluation:**
-- [train_rl_agent.py](train_rl_agent.py) — Main training script
-- [analyze_policy.py](analyze_policy.py) — Understand learned behavior
-- [analyze_voi.py](analyze_voi.py) — Compare vs baselines
-- [tune_rewards.py](tune_rewards.py) — Grid search over α, β
-- [visualize_voi.py](visualize_voi.py) — Generate plots
-
-**Orchestration & Documentation:**
-- [full_evaluation.sh](full_evaluation.sh) — Run entire pipeline
-- [EVALUATION.md](EVALUATION.md) — Complete usage guide
-- [README.md](README.md) — This file
-
-**Testing:**
-- [test_mdp.py](test_mdp.py) — Unit tests
+Costs are **operational difficulty** (how hard the data is to obtain), never derived from how much accuracy the bundle delivers — that would be circular. They live in [bundle_costs.py](bundle_costs.py) in seconds, and λ converts them to reward units.
 
 ---
 
-## External References
+## Files
 
-- MDP formulation: `docs/data_pipeline.md` section 5 (Active Feature Acquisition)
-- Pre-trained models: Generated by `CODE/training/train/bundle_sweep.py` (1024 cached classifiers)
-- Feature definitions: `CODE/training/train/train_classifier.py` (BUNDLE_COLS, BUNDLE_NAMES)
+**Core**
+- [mdp_environment.py](mdp_environment.py) — state, transitions, rewards; caches the 1024 classifiers class-side
+- [ql_solver.py](ql_solver.py) — tabular Q-learning + `warm_start()` DP seeding
+- [bundle_costs.py](bundle_costs.py) — per-bundle acquisition time in seconds
+
+**Planning & training**
+- [plan_optimal_policy.py](plan_optimal_policy.py) — exact DP solution, λ-sweep Pareto frontier ← *start here*
+- [train_rl_agent.py](train_rl_agent.py) — train and evaluate one agent
+
+**Analysis**
+- [tune_rewards.py](tune_rewards.py) — λ sweep: trained agent vs exact planner
+- [analyze_policy.py](analyze_policy.py) — which bundles the policy acquires, and their value
+- [analyze_voi.py](analyze_voi.py) — comparison against fixed baselines
+- [visualize_voi.py](visualize_voi.py) — plots
+- [full_evaluation.sh](full_evaluation.sh) — runs all of the above in order
+
+**Other**
+- [test_mdp.py](test_mdp.py) — smoke tests
+- [EVALUATION.md](EVALUATION.md) — workflow, interpretation, troubleshooting
+
+---
+
+## Design notes
+
+1. **Tabular, not neural.** 1024 states × 11 actions fits in a dict; function approximation would only add error. This stops being true once confidence enters the state.
+2. **Models are pre-trained, never fitted at runtime.** The environment only does inference, from a class-level cache keyed by mask.
+3. **Planning uses valid, reporting uses test.** Selecting a subset on test would leak.
+4. **Costs are exogenous.** Difficulty of acquisition, not value of acquisition.
+
+## External references
+
+- MDP formulation — `docs/data_pipeline.md` §5
+- Pre-trained subset models — `CODE/training/train/bundle_sweep.py`
+- Bundle definitions — `CODE/training/train/train_classifier.py` (`BUNDLE_COLS`, `BUNDLE_NAMES`)

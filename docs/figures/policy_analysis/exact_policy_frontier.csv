@@ -1,0 +1,11 @@
+lambda,mask,n_bundles,seconds,valid,test_f1,test_acc,acquired (in order)
+0.0,511,9,6.23,0.7401,0.7371,0.7371,vehicles -> casualties -> casualty_demographics -> road_class -> road_environment -> junction -> crash_history -> aadf -> osm
+0.002,511,9,6.23,0.7401,0.7371,0.7371,vehicles -> casualties -> casualty_demographics -> road_class -> road_environment -> junction -> crash_history -> aadf -> osm
+0.005,511,9,6.23,0.7401,0.7371,0.7371,vehicles -> casualties -> casualty_demographics -> road_class -> road_environment -> junction -> crash_history -> aadf -> osm
+0.01,115,5,3.15,0.7227,0.7088,0.7089,vehicles -> casualties -> road_environment -> junction -> crash_history
+0.02,633,6,1.23,0.6958,0.688,0.6881,vehicles -> road_class -> road_environment -> junction -> crash_history -> meteo
+0.05,369,5,1.16,0.6928,0.6855,0.6858,vehicles -> road_environment -> junction -> crash_history -> osm
+0.1,208,3,0.13,0.6377,0.6381,0.6385,road_environment -> crash_history -> aadf
+0.2,272,2,0.06,0.6271,0.6298,0.6307,road_environment -> osm
+0.5,272,2,0.06,0.6271,0.6298,0.6307,road_environment -> osm
+1.0,256,1,0.01,0.5943,0.5828,0.5828,osm

@@ -1,335 +1,121 @@
-# RL Agent Evaluation & Analysis Guide
+# RL Agent Evaluation Guide
 
-Complete workflow for validating, tuning, and understanding the learned acquisition policy.
+How to pick λ, train against it, and check the result is actually optimal.
 
-## Quick Start
-
-Run the full evaluation pipeline (takes ~10 minutes):
-
-```bash
-bash CODE/training/agent/full_evaluation.sh
-```
-
-This will:
-1. ✅ Train agent on 1000 episodes
-2. ✅ Analyze what bundles it prefers to acquire
-3. ✅ Test 9 different reward weight configurations
-4. ✅ Compare against baseline strategies
-5. ✅ Generate publication-quality visualizations
+See [README.md](README.md) for the MDP itself and what α/β/λ mean. Short version: **λ is the only parameter that changes the policy** — it prices one second of acquisition time in accuracy points. β rescales everything (policy-invariant, leave at 1.0) and α is small exploration shaping (leave at 0.05).
 
 ---
 
-## Individual Tools
+## The workflow
 
-### 1. Train Agent (Extended)
+### Step 1 — Solve the MDP exactly, then choose λ
 
 ```bash
-# Standard training
+python CODE/training/agent/plan_optimal_policy.py
+```
+
+This does **not** train anything. It solves the mask-level MDP in closed form by dynamic programming (transitions are deterministic and every mask's accuracy is already known from `bundle_sweep.py`) and sweeps λ to produce the accuracy/time menu:
+
+```
+ lambda  mask  n_bundles  seconds  valid  test_f1  acquired (in order)
+  0.002   511          9     6.23 0.7401   0.7371  vehicles -> casualties -> ... -> osm
+  0.010   115          5     3.15 0.7227   0.7088  vehicles -> casualties -> road_environment -> junction -> crash_history
+  0.100   208          3     0.13 0.6377   0.6381  road_environment -> crash_history -> aadf
+  1.000   256          1     0.01 0.5943   0.5828  osm
+```
+
+**Pick the row whose acquisition time your dispatch scenario can absorb.** Its λ is your setting and its `test_f1` is the score the trained agent should reach. There is no "best" row — the choice is about how much call-handler time is worth, which is your call, not the model's.
+
+Options: `--metric valid_accuracy` to plan on accuracy instead of macro F1; `--lambdas ...` for a custom sweep.
+
+### Step 2 — Train at that λ, warm-started
+
+```bash
 python CODE/training/agent/train_rl_agent.py \
-  --n-train 1000 \
-  --n-eval 500 \
-  --alpha 0.1 \
-  --gamma 0.99 \
-  --epsilon 0.1
+  --warm-start \
+  --cost-scale 0.01 \
+  --step-weight 0.05 \
+  --terminal-weight 1.0 \
+  --n-train 1500 --n-eval 1000 \
+  --output-dir models/rl_agents/warmstart
 ```
 
-**What it does:**
-- Trains Q-learning agent on 1000 collision samples
-- Evaluates on 500 test samples
-- Shows cost summary and policy decisions
-- Saves trained model to `models/rl_agents/`
+`--warm-start` seeds the Q-table from the step-1 DP solution. **Use it.** Without it the learner has to discover a specific multi-bundle acquisition path from noisy 0/1 terminal rewards, which pure ε-greedy essentially never does — cold-start runs plateau at one bundle (0.597 vs 0.700 at the same λ).
 
-**Key parameters:**
-- `--n-train`: Number of training episodes (default 1000)
-- `--n-eval`: Number of evaluation episodes (default 500)
-- `--alpha`: Learning rate (default 0.1)
-- `--gamma`: Discount factor (default 0.99)
-- `--epsilon`: Exploration rate (default 0.1)
-- `--step-weight`: Weight for confidence rewards α (default 1.0)
-- `--terminal-weight`: Weight for accuracy rewards β (default 1.0)
+`--cost-scale` is λ. Bundle seconds come from `bundle_costs.py`; λ multiplies them into reward units.
 
----
-
-### 2. Analyze Learned Policy
+### Step 3 — Check the agent matched the planner
 
 ```bash
-python CODE/training/agent/analyze_policy.py \
-  --rl-model models/rl_agents/ql_normalized_binary_a0.1_g0.99_e0.1.json \
-  --n-samples 500
+python CODE/training/agent/tune_rewards.py --lambdas 0.002 0.01 0.05 0.2
 ```
 
-**What it shows:**
-- Which bundles the agent acquires at each state
-- Value-of-information per bundle (avg confidence improvement)
-- How many times each bundle was acquired
-- Acquisition sequences for sample collisions
+Trains an agent at each λ and prints it beside the exact optimum:
 
-**Output:**
 ```
-================================================================================
-POLICY ANALYSIS
-================================================================================
-
-Action Distribution:
-  Predict (action 0): 450 times
-  Acquire osm                  (action 8):   25 times
-  Acquire meteo                (action 9):   15 times
-  Acquire aadf                 (action 7):   10 times
-  ...
-
-Value-of-Information per Bundle:
-(Avg confidence improvement when acquiring)
-
-  [8] osm                  +0.0623 ± 0.0456  (acquired   25 times)
-  [9] meteo                +0.0412 ± 0.0389  (acquired   15 times)
-  [7] aadf                 +0.0198 ± 0.0134  (acquired   10 times)
-  [0] vehicles             never acquired
-  ...
+ lambda  planner_bundles  planner_test_acc  agent_bundles  agent_test_acc    gap
+  0.002                9            0.7371          10.00          0.7120  -0.03
+  0.010                5            0.7089           7.00          0.7000  -0.01
 ```
 
-**Interpretation:**
-- **High value bundles**: Agent prefers these (worth the cost)
-- **Never acquired**: Agent learned these don't help enough to justify cost
-- **Low acquisition count**: High cost relative to benefit
+A `gap` near zero means the learner reached the optimum. A large negative gap means **under-training or a bad warm start — not a bad λ.** λ cannot be "wrong"; it defines which optimum you are aiming at.
 
----
-
-### 3. Tune Reward Weights (α, β)
-
-The agent's behavior depends on two reward weights:
-- **α (step_weight)**: How much to reward per-step confidence improvement
-- **β (terminal_weight)**: How much to reward final prediction accuracy
-
-Test different combinations:
+### Step 4 — Inspect and compare
 
 ```bash
-python CODE/training/agent/tune_rewards.py \
-  --alpha-values 0.5 1.0 2.0 \
-  --beta-values 0.5 1.0 2.0 \
-  --n-train 500 \
-  --n-eval 200
-```
-
-**Output:**
-```
-   alpha  beta  accuracy  mean_return  mean_steps  mean_confidence
-     2.0   2.0    0.6823      0.6823       1.2300           0.7156
-     2.0   1.0    0.6734      0.6734       1.1800           0.7043
-     1.0   2.0    0.6645      0.6645       0.9200           0.6734
-     ...
-```
-
-**What to look for:**
-- **High accuracy**: Agent is making correct predictions
-- **Low mean_steps**: Agent isn't over-acquiring features
-- **High mean_confidence**: Agent is confident in its decisions
-- Best balance often trades off steps vs accuracy
-
----
-
-### 4. Compare Against Baselines
-
-```bash
-python CODE/training/agent/analyze_voi.py \
-  --rl-model models/rl_agents/ql_normalized_binary_a0.1_g0.99_e0.1.json \
-  --n-samples 1000
-```
-
-Compares learned policy against:
-- **predict_immediate**: Predict without acquiring anything (baseline 1)
-- **full_acquisition**: Acquire all 10 bundles, then predict (baseline 2)
-- **greedy_confidence**: Acquire until confidence > 0.8 (baseline 3)
-- **learned_policy**: Your trained agent (if model provided)
-
-**Output:**
-```
-Strategy Comparison Summary
-================================================
-
-predict_immediate:
-  Accuracy: 0.3500
-  Mean acquisition steps: 0.00
-  Mean final confidence: 0.5234
-  Mean reward: 0.3500
-
-learned_policy:
-  Accuracy: 0.6200
-  Mean acquisition steps: 1.45
-  Mean final confidence: 0.6834
-  Mean reward: 0.6200
-
-full_acquisition:
-  Accuracy: 0.6450
-  Mean acquisition steps: 10.00
-  Mean final confidence: 0.7102
-  Mean reward: 0.6450
-```
-
-**Interpretation:**
-- If `learned_policy` accuracy is close to `full_acquisition` but with fewer steps, it's working well
-- If significantly worse, may need more training or different reward weights
-- Comparison against `predict_immediate` shows value of acquisition
-
----
-
-### 5. Create Visualizations
-
-```bash
+python CODE/training/agent/analyze_policy.py --rl-model <model.json> --n-samples 500
+python CODE/training/agent/analyze_voi.py   --rl-model <model.json> --n-samples 300
 python CODE/training/agent/visualize_voi.py \
   --results-csv docs/figures/voi/strategy_comparison.csv \
-  --policy-analysis-json docs/figures/policy_analysis/policy_analysis.json \
-  --output-dir docs/figures/voi_plots
+  --policy-analysis-json docs/figures/policy_analysis/policy_analysis.json
 ```
 
-**Generates:**
-1. **bundle_costs.png**: Acquisition costs by bundle (color-coded by tier)
-2. **voi_summary.png**: Accuracy vs steps and accuracy vs time
-3. **bundle_value.png**: Value-of-information ranking
+`analyze_policy` shows which bundles get acquired and their average confidence contribution. `analyze_voi` compares against three fixed baselines (predict-immediately, greedy-to-threshold, full acquisition).
 
----
-
-## Workflow Recommendations
-
-### Scenario 1: Validate That Learning Works
+### Everything at once
 
 ```bash
-# Quick validation (2 minutes)
-python CODE/training/agent/train_rl_agent.py --n-train 500 --n-eval 200
-python CODE/training/agent/analyze_policy.py \
-  --rl-model models/rl_agents/ql_normalized_binary_*.json \
-  --n-samples 200
-```
-
-**Check:** Does the policy acquire external APIs preferentially? (they're cheapest)
-
-### Scenario 2: Tune for Your Use Case
-
-```bash
-# If accuracy is more important than latency:
-python CODE/training/agent/tune_rewards.py \
-  --alpha-values 0.1 0.5 1.0 \
-  --beta-values 2.0 3.0 4.0
-
-# Then train with best β:
-python CODE/training/agent/train_rl_agent.py \
-  --n-train 2000 \
-  --terminal-weight 3.0
-```
-
-### Scenario 3: Comprehensive Analysis
-
-```bash
-# Full pipeline (production quality)
-bash CODE/training/agent/full_evaluation.sh
-
-# Then review outputs:
-# - docs/figures/policy_analysis/policy_analysis.json
-# - models/rl_agents/tuning/tuning_results.csv
-# - docs/figures/voi_plots/*.png
+LAMBDA=0.01 bash CODE/training/agent/full_evaluation.sh
 ```
 
 ---
 
-## Expected Results
+## Reference numbers
 
-### With Realistic Bundle Costs
+Baseline (mask 0, timestamp only): **0.5408** test F1.
+Full acquisition (mask 1023): **0.7374**. The unconstrained optimum is mask 511 at **0.7371** — i.e. *dropping `meteo` is free*, it contributes nothing and costs 30 ms.
 
-**Learned policy should:**
-- ✅ Prefer external APIs (10-30ms) over map lookups (40-60ms)
-- ✅ Prefer map lookups over caller questions (1-3 seconds)
-- ✅ Rarely acquire caller bundles unless confidence very low
-- ✅ Achieve 55-65% accuracy with ~1 acquisition step on average
+| setup | accuracy | steps |
+|---|---|---|
+| cold start, λ=0.01 | 0.597 | 1.0 |
+| warm start, λ=0.01 | 0.700 | 7.0 |
+| warm start, λ=0.002 | 0.712 | 10.0 |
 
-**Baseline comparisons:**
-- predict_immediate: ~35% accuracy, 0 steps
-- learned_policy: ~60% accuracy, ~1.5 steps
-- full_acquisition: ~65% accuracy, 10 steps
-
-The learned policy should be close to full_acquisition in accuracy while using far fewer acquisitions.
+**0.737 is the ceiling for any mask-only policy.** The state carries no per-collision information beyond the mask, so the policy is necessarily the same subset for every call. Beating it requires putting prediction confidence into the state — see the limitation section in [README.md](README.md).
 
 ---
 
 ## Troubleshooting
 
-### Agent only predicts, never acquires
+**Every configuration returns identical numbers.**
+This was a real bug (fixed 1 Sept 2026): `MDPEnvironment.step()` was not passing α, β or the bundle costs into the reward functions, so they defaulted to α=1, β=1, costs=0 regardless of what you asked for. If you see it again, check that `MDPEnvironment` is being constructed with `step_weight` / `terminal_weight` / `bundle_costs` — `QLearner` must forward its own values through.
 
-**Symptom:** Policy always chooses action 0 (predict)
+**Agent acquires nothing (mean_steps = 0).**
+Expected at large λ — time is priced so high nothing is worth acquiring. Check the planner: if it also stops at mask 0 for your λ, the agent is right. If the planner acquires and the agent does not, you forgot `--warm-start`.
 
-**Causes:**
-1. Not enough training episodes (use `--n-train 2000`)
-2. Acquisition costs too high relative to rewards
-3. Reward weights poorly calibrated (try different α/β)
+**Agent acquires everything at high λ.**
+Costs are not reaching the reward. Verify the `Cost scale (lambda)` line printed at startup is non-zero.
 
-**Fix:**
-```bash
-# Increase step reward weight to encourage exploration
-python CODE/training/agent/train_rl_agent.py \
-  --n-train 2000 \
-  --step-weight 2.0 \
-  --epsilon 0.2
-```
+**Agent stalls at one bundle.**
+Cold start. Add `--warm-start`.
 
-### Accuracy worse than baselines
-
-**Symptom:** learned_policy accuracy << full_acquisition accuracy
-
-**Causes:**
-1. Insufficient training
-2. Poor reward weight balance
-3. Learning rate too high (causes instability)
-
-**Fix:**
-```bash
-# More training + lower learning rate
-python CODE/training/agent/train_rl_agent.py \
-  --n-train 5000 \
-  --alpha 0.05 \
-  --terminal-weight 2.0
-```
-
-### Agent acquires everything
-
-**Symptom:** Policy acquires many bundles even expensive ones
-
-**Causes:**
-1. Terminal reward weight too low
-2. Confidence rewards too high
-3. Acquisition costs may be miscalibrated
-
-**Fix:**
-```bash
-# Increase accuracy reward
-python CODE/training/agent/train_rl_agent.py \
-  --terminal-weight 2.0 \
-  --step-weight 0.5
-```
+**Score below the planner's number for that λ.**
+More episodes, or check `--warm-start` is on. The planner's number is achievable by construction — the gap is a learning problem, never a λ problem.
 
 ---
 
-## Key Metrics to Track
+## What NOT to do
 
-| Metric | Good Range | Interpretation |
-|--------|-----------|-----------------|
-| Accuracy | 55-65% | Prediction correctness |
-| Mean steps | 0.5-2.0 | Avg acquisitions per collision |
-| Mean confidence | 0.65-0.75 | Model certainty |
-| External API acquisitions | >50% of all acquisitions | Prefers cheap bundles |
-| Caller acquisitions | <10% of all acquisitions | Avoids expensive bundles |
-
----
-
-## Next Steps
-
-1. **Run full evaluation** → `bash full_evaluation.sh`
-2. **Review policy analysis** → Check which bundles add value
-3. **Tune parameters** → Test different α/β combinations
-4. **Select best config** → Choose weights that balance accuracy/cost for your use case
-5. **Deploy** → Train final agent with best parameters on larger dataset
-
----
-
-## References
-
-- MDP formulation: See [README.md](README.md)
-- Bundle costs: [bundle_costs.py](bundle_costs.py)
-- Training details: [train_rl_agent.py](train_rl_agent.py)
+- **Do not derive λ or bundle costs from how much accuracy a bundle delivers.** That is circular: cost must reflect operational difficulty (call time, query latency), and the whole point is to discover whether that cost buys enough accuracy. An earlier iteration of this repo did exactly that; it has been removed.
+- **Do not tune β.** Scaling β, α and λ together leaves the policy unchanged, so β only rescales the reported returns.
+- **Do not select a subset on the test split.** The planner deliberately plans on valid and reports test.

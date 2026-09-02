@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A UK road-accident severity predictor (STATS19 data). The core deliverable is a bank of frozen XGBoost classifiers — one per **acquisition subset** — trained to predict Fatal/Serious/Slight (or binary Slight-vs-Severe) from only what a 999 dispatcher would know. The eventual goal (per README) is a Reinforcement Learning "Active Feature Acquisition" agent that decides at runtime which information is worth acquiring before invoking the matching frozen classifier — the classifiers here are the environment that agent will sit on top of, not yet implemented.
+A UK road-accident severity predictor (STATS19 data). The core deliverable is a bank of frozen XGBoost classifiers — one per **acquisition subset** — trained to predict Fatal/Serious/Slight (or binary Slight-vs-Severe) from only what a 999 dispatcher would know. On top of that bank sits a Reinforcement Learning "Active Feature Acquisition" agent that decides at runtime which information is worth acquiring before invoking the matching frozen classifier — implemented in `CODE/training/agent/` (September 2026), see that folder's README.
 
 **Action-space revision (August 2026) — the "8 frozen classifiers" design is superseded.** It was 8 classifiers, one per subset of the 3 external sources, trained on randomly masked STATS19 fields. Two things changed:
 - **Masking is no longer used.** It cost accuracy at every missingness level versus a dedicated per-subset model, and made every headline number a pooled average across missingness levels. `generate_masked_splits.R` and the `masked` variant still exist and still run, but no current work uses them. Don't default to `--data-variant masked`.
@@ -13,6 +13,13 @@ A UK road-accident severity predictor (STATS19 data). The core deliverable is a 
 **Bundle invariants (easy to break):** bundle order in `BUNDLE_COLS` *is* the bitmask bit order, and `bundle_feature_columns()` emits columns in that order. XGBoost binds features positionally, so **reordering bundles, or changing any bundle's contents, silently invalidates every cached model** — wipe `models/subsets/` and re-run the sweep. An import-time assert checks the bundles still cover `BASE_COLS + SOURCE_COLS + weather_conditions`, so a feature added to `BASE_COLS` without a bundle home fails loudly rather than dropping out of the action space.
 
 **Current focus:** the RL Active Feature Acquisition agent over the 10-bundle action space, on the `normalized` (unmasked, clean one-row-per-collision) data variant, binary Slight-vs-Severe. Prefer changes/experiments that target this variant+task over generic changes to the masked/3-class models unless asked otherwise. The single-model reference point remains `models/classifier_aadf_meteo_osm_normalized_binary.json` (full-information, test macro F1 0.7367).
+
+**RL agent status (1 September 2026) — read `CODE/training/agent/README.md` before touching it.** The agent lives in `CODE/training/agent/` and is *plan-then-learn*: the mask-level MDP is fully known (deterministic transitions; every mask's accuracy already measured by `bundle_sweep.py`), so `plan_optimal_policy.py` solves it exactly by DP over the subset lattice and `train_rl_agent.py --warm-start` seeds the Q-table from that solution before refining. Three things are easy to get wrong here:
+- **There is only one meaningful reward parameter, λ (`--cost-scale`)** — the exchange rate pricing one second of acquisition time in accuracy points. β (`--terminal-weight`) rescales the whole reward and is policy-invariant; α (`--step-weight`) is exploration shaping that telescopes to `α·(final − initial confidence)`. Tuning β or grid-searching α/β is wasted effort.
+- **Acquisition costs are operational difficulty, never value delivered.** `bundle_costs.py` holds per-bundle seconds (call time / query latency). Deriving cost from a bundle's accuracy gain is circular and was removed once already.
+- **Cold-start Q-learning does not work here** and plateaus at one bundle (0.597 vs 0.700 warm-started at λ=0.01) — ε-greedy almost never discovers a specific multi-bundle acquisition path from noisy 0/1 terminal rewards.
+
+Current ceiling is **test macro F1 0.7374** (full acquisition; the unconstrained optimum is mask 511 at 0.7371 — `meteo` contributes nothing). That is the ceiling for *any* policy whose state is the mask alone, because such a policy necessarily acquires the same subset for every collision. Beating it requires adding the current prediction confidence to the state so the agent can adapt per collision — that is the open next step, not a tuning problem. A reward-wiring bug (α/β/costs never reached the reward functions) invalidated every tuning result recorded before 1 September 2026.
 
 **Dataset-difficulty history (17 July 2026) — read before comparing any macro F1 across dates.** Macro F1 on this task is primarily a function of how Fatal-heavy the Severe class is (Fatal collisions are easy; Serious-vs-Slight is the genuinely hard boundary), which `SERIOUS_CAP`/`SLIGHT_CAP` in `stats19_download.R` directly control. Three configs have been tried:
   1. **2,800/5,600 caps → 89,791 collisions, 36% Fatal-of-Severe → test macro F1 ≈ 0.6967.** The original config; superseded below, but still the "moderate" reference point and what most historical experiment notes in this repo (feature ablations, model-family sweeps, ensemble results) were measured against.
@@ -35,8 +42,9 @@ CODE/
     generate_masked_splits.R  # steps 4,9,11,12,13: source-agnostic pipeline stages
     qa/                       # standalone diagnostic scripts, not part of run_pipeline.R
   training/
-    train/                    # train_classifier.py, calibrate_thresholds.py
+    train/                    # train_classifier.py, calibrate_thresholds.py, bundle_sweep.py
     tune/                     # tune_full_acquisition_classifier.py (Optuna)
+    agent/                    # RL Active Feature Acquisition agent (own README + EVALUATION.md)
   experiments/                # analysis/ablation scripts, one-off, not part of the pipeline
 data/
   raw/{stats19,aadf,osm,openmeteo}/   # one subfolder per source

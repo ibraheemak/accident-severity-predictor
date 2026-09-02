@@ -67,6 +67,38 @@ class QLearner:
 
         np.random.seed(seed)
 
+    def warm_start(self, terminal_values: Dict[int, float]):
+        """Initialize the Q-table from the exact DP solution of the mask-level
+        MDP (plan-then-learn).
+
+        Because transitions are deterministic and the expected terminal reward
+        of stopping at mask m is known in advance (beta * that subset
+        classifier's validation accuracy, measured by bundle_sweep.py), the
+        optimal Q-values can be computed in closed form over the subset
+        lattice. Seeding the table with them means greedy evaluation follows
+        the planner-optimal path immediately, and subsequent Q-learning
+        episodes refine rather than discover -- pure epsilon-greedy discovery
+        of a specific multi-bundle path from 0/1 terminal rewards needs far
+        more episodes than is practical.
+
+        Args:
+            terminal_values: {mask: expected terminal reward}, typically
+                terminal_weight * valid_accuracy per mask from the bundle
+                sweep CSV. Must cover every mask 0..1023.
+        """
+        V: Dict[int, float] = {}
+        n_masks = 1 << 10
+        for m in sorted(range(n_masks), key=lambda x: bin(x).count("1"),
+                        reverse=True):
+            self.Q[m][0] = terminal_values[m]
+            best = terminal_values[m]
+            for i in range(10):
+                if not m >> i & 1:
+                    q = -self.bundle_costs.get(i, 0.0) + self.gamma * V[m | (1 << i)]
+                    self.Q[m][i + 1] = q
+                    best = max(best, q)
+            V[m] = best
+
     def _get_actions(self, mask: int) -> List[int]:
         """Get valid actions for a given mask.
 
@@ -196,6 +228,9 @@ class QLearner:
             env = MDPEnvironment(
                 X_train.iloc[sample_idx],
                 y_train.iloc[sample_idx],
+                step_weight=self.step_weight,
+                terminal_weight=self.terminal_weight,
+                bundle_costs=self.bundle_costs,
             )
             reward, length = self.train_episode(env)
             pbar.set_postfix({"return": f"{reward:.3f}", "steps": length})
@@ -239,6 +274,9 @@ class QLearner:
             env = MDPEnvironment(
                 X_test.iloc[sample_idx],
                 y_test.iloc[sample_idx],
+                step_weight=self.step_weight,
+                terminal_weight=self.terminal_weight,
+                bundle_costs=self.bundle_costs,
             )
             reward, info = self.evaluate_episode(env)
             returns.append(reward)
