@@ -126,9 +126,7 @@ def plot_saturation(sat: pd.DataFrame, out: Path):
     ax.annotate(f"ceiling {ceiling:.4f}", (k_ceiling, ceiling),
                 textcoords="offset points", xytext=(0, -17),
                 ha="center", fontsize=9, color=MUTED)
-    ax.annotate(f"past {knee} bundles every further\nacquisition is worth ≤ +0.002",
-                (knee + 0.2, floor + (ceiling - floor) * 0.42),
-                fontsize=9, color=INK_2)
+
 
     # A band needs naming; a legend does that without floating text colliding
     # with the axis, which is what the annotation version did.
