@@ -64,13 +64,12 @@ A `gap` near zero means the learner reached the optimum. A large negative gap me
 
 ```bash
 python CODE/training/agent/analyze_policy.py --rl-model <model.json> --n-samples 500
-python CODE/training/agent/analyze_voi.py   --rl-model <model.json> --n-samples 300
-python CODE/training/agent/visualize_voi.py \
-  --results-csv docs/figures/voi/strategy_comparison.csv \
-  --policy-analysis-json docs/figures/policy_analysis/policy_analysis.json
+python CODE/training/agent/compare_strategies.py   --rl-model <model.json> --n-samples 300
+python CODE/training/agent/plot_strategies.py \
+  --results-csv docs/figures/strategy_comparison/strategy_comparison.csv \
 ```
 
-`analyze_policy` shows which bundles get acquired and their average confidence contribution. `analyze_voi` compares against three fixed baselines (predict-immediately, greedy-to-threshold, full acquisition).
+`analyze_policy` shows which bundles get acquired and their average confidence contribution. `compare_strategies` compares against three fixed baselines (predict-immediately, greedy-to-threshold, full acquisition).
 
 ### Everything at once
 

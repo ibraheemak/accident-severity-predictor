@@ -58,18 +58,17 @@ python CODE/training/agent/analyze_policy.py \
 # Step 5: compare against fixed baselines.
 echo ""
 echo "STEP 5: Baseline comparison (predict-now / greedy / full acquisition)..."
-python CODE/training/agent/analyze_voi.py \
+python CODE/training/agent/compare_strategies.py \
   --n-samples 300 \
   --rl-model "$MODEL_PATH" \
-  --output-dir "docs/figures/voi"
+  --output-dir "docs/figures/strategy_comparison"
 
 # Step 6: plots.
 echo ""
 echo "STEP 6: Creating visualisations..."
-python CODE/training/agent/visualize_voi.py \
-  --results-csv "docs/figures/voi/strategy_comparison.csv" \
-  --policy-analysis-json "docs/figures/policy_analysis/policy_analysis.json" \
-  --output-dir "docs/figures/voi_plots"
+python CODE/training/agent/plot_strategies.py \
+  --results-csv "docs/figures/strategy_comparison/strategy_comparison.csv" \
+  --output-dir "docs/figures/strategy_comparison"
 
 echo ""
 echo "================================================"
@@ -81,8 +80,8 @@ echo "  1. Exact frontier:   docs/figures/policy_analysis/exact_policy_frontier.
 echo "  2. Trained model:    $MODEL_PATH"
 echo "  3. Agent vs planner: $OUTPUT_DIR/lambda_sweep/lambda_sweep.csv"
 echo "  4. Policy analysis:  docs/figures/policy_analysis/"
-echo "  5. Baselines:        docs/figures/voi/"
-echo "  6. Plots:            docs/figures/voi_plots/"
+echo "  5. Baselines:        docs/figures/strategy_comparison/"
+echo "  6. Plots:            docs/figures/strategy_comparison/"
 echo ""
 echo "Read the frontier CSV first: pick the row whose time budget you accept,"
 echo "then re-run step 2 with LAMBDA set to that row's lambda."

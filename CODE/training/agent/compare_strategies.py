@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""Analyze value of information: compare RL agent vs. baseline strategies.
+"""Compare acquisition STRATEGIES: the learned RL policy against fixed baselines.
 
-Evaluates multiple strategies for deciding when to acquire features:
+Evaluates four ways of deciding when to stop acquiring and predict:
   1. Immediate prediction (acquire nothing)
   2. Full acquisition (acquire everything)
   3. Greedy confidence (acquire bundles until confidence > threshold)
   4. Learned RL policy (from Q-learning)
 
-Produces:
-  - Summary statistics comparing strategies
-  - Plots showing accuracy/cost trade-offs
-  - Per-bundle value-of-information curves
+Each is run per collision and scored on accuracy, acquisition steps and final
+confidence, so the learned policy can be held against what it has to beat.
+
+NOT to be confused with the value-of-information sweep in voi/, which asks a
+different question: what each individual BUNDLE is worth across all 1,024
+subsets. This script compares whole strategies; voi/ compares bundles.
+(This file was named analyze_voi.py until September 2026, which conflated the
+two.)
 """
 
 import argparse
@@ -159,7 +163,7 @@ def main():
                         help="Number of test samples to evaluate")
     parser.add_argument("--rl-model", type=Path, default=None,
                         help="Path to trained RL model; if None, uses default")
-    parser.add_argument("--output-dir", type=Path, default=Path("docs/figures/voi"),
+    parser.add_argument("--output-dir", type=Path, default=Path("docs/figures/strategy_comparison"),
                         help="Directory for output plots")
     parser.add_argument("--confidence-threshold", type=float, default=0.8,
                         help="Confidence threshold for greedy strategy")

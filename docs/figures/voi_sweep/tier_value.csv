@@ -1,0 +1,4 @@
+tier,mean_marginal,total_seconds,n_bundles
+ask_caller,0.03395674296289525,6.0,3
+map_lookup,0.008720763206104267,0.2,4
+external_api,0.0016240458832429822,0.06,3

@@ -43,6 +43,9 @@ So there is really **one** parameter: **λ**.
 ## Quick start
 
 ```bash
+# 0. See what each bundle is actually worth (analysis only, no training)
+python CODE/training/agent/voi/compute_voi.py && python CODE/training/agent/voi/plot_voi.py
+
 # 1. Solve the MDP exactly and see the accuracy/time menu
 python CODE/training/agent/plan_optimal_policy.py
 
@@ -146,10 +149,11 @@ Costs are **operational difficulty** (how hard the data is to obtain), never der
 - [train_rl_agent.py](train_rl_agent.py) — train and evaluate one agent
 
 **Analysis**
+- [voi/](voi/) — value-of-information sweep: what each bundle is worth across all 1,024 subsets, with figures ([voi/README.md](voi/README.md))
 - [tune_rewards.py](tune_rewards.py) — λ sweep: trained agent vs exact planner
 - [analyze_policy.py](analyze_policy.py) — which bundles the policy acquires, and their value
-- [analyze_voi.py](analyze_voi.py) — comparison against fixed baselines
-- [visualize_voi.py](visualize_voi.py) — plots
+- [compare_strategies.py](compare_strategies.py) — the learned policy against fixed baselines (predict-now / greedy / full acquisition)
+- [plot_strategies.py](plot_strategies.py) — figures for that comparison, plus per-bundle acquisition costs
 - [full_evaluation.sh](full_evaluation.sh) — runs all of the above in order
 
 **Other**
