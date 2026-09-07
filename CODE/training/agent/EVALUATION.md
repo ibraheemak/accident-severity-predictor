@@ -8,27 +8,11 @@ See [README.md](README.md) for the MDP itself and what α/β/λ mean. Short vers
 
 ## The workflow
 
-### Step 1 — Solve the MDP exactly, then choose λ
+### Step 1 — Choose λ
 
-```bash
-python CODE/training/agent/plan_optimal_policy.py
-```
+λ prices one second of acquisition time in accuracy points, and it is the only reward parameter that changes which policy is optimal. It is a deployment decision, not a quantity to maximise: pick the acquisition time your dispatch scenario can absorb. `tune_rewards.py` (step 3) shows what the agent achieves at each setting.
 
-This does **not** train anything. It solves the mask-level MDP in closed form by dynamic programming (transitions are deterministic and every mask's accuracy is already known from `bundle_sweep.py`) and sweeps λ to produce the accuracy/time menu:
-
-```
- lambda  mask  n_bundles  seconds  valid  test_f1  acquired (in order)
-  0.002   511          9     6.23 0.7401   0.7371  vehicles -> casualties -> ... -> osm
-  0.010   115          5     3.15 0.7227   0.7088  vehicles -> casualties -> road_environment -> junction -> crash_history
-  0.100   208          3     0.13 0.6377   0.6381  road_environment -> crash_history -> aadf
-  1.000   256          1     0.01 0.5943   0.5828  osm
-```
-
-**Pick the row whose acquisition time your dispatch scenario can absorb.** Its λ is your setting and its `test_f1` is the score the trained agent should reach. There is no "best" row — the choice is about how much call-handler time is worth, which is your call, not the model's.
-
-Options: `--metric valid_accuracy` to plan on accuracy instead of macro F1; `--lambdas ...` for a custom sweep.
-
-### Step 2 — Train at that λ, warm-started
+### Step 2 — Train at that λ, seeded
 
 ```bash
 python CODE/training/agent/train_rl_agent.py \
@@ -40,41 +24,41 @@ python CODE/training/agent/train_rl_agent.py \
   --output-dir models/rl_agents/warmstart
 ```
 
-`--warm-start` seeds the Q-table from the step-1 DP solution. **Use it.** Without it the learner has to discover a specific multi-bundle acquisition path from noisy 0/1 terminal rewards, which pure ε-greedy essentially never does — cold-start runs plateau at one bundle (0.597 vs 0.700 at the same λ).
+`--warm-start` seeds the Q-table from measured one-step subset values (see `seeding.py`). **Use it.** Without it the learner has to discover a specific multi-bundle acquisition path from noisy 0/1 terminal rewards, which pure ε-greedy essentially never does — cold-start runs plateau at one bundle (0.597 vs 0.739 at the same λ).
 
 `--cost-scale` is λ. Bundle seconds come from `bundle_costs.py`; λ multiplies them into reward units.
 
-### Step 3 — Check the agent matched the planner
+### Step 3 — Sweep λ
 
 ```bash
-python CODE/training/agent/tune_rewards.py --lambdas 0.002 0.01 0.05 0.2
+python CODE/training/agent/sweeps/tune_rewards.py --lambdas 0.002 0.01 0.05 0.2
 ```
 
-Trains an agent at each λ and prints it beside the exact optimum:
+Trains an agent at each λ and reports accuracy, bundles acquired, seconds spent, and how many *distinct* acquisition sets the policy used. Higher λ should buy fewer seconds at lower accuracy. `distinct_sets = 1` means the policy collapsed to a fixed shopping list and is ignoring `p_t`.
 
-```
- lambda  planner_bundles  planner_test_acc  agent_bundles  agent_test_acc    gap
-  0.002                9            0.7371          10.00          0.7120  -0.03
-  0.010                5            0.7089           7.00          0.7000  -0.01
+```bash
+python CODE/training/agent/sweeps/tune_learning.py --conf-bins 1 3 5 8
 ```
 
-A `gap` near zero means the learner reached the optimum. A large negative gap means **under-training or a bad warm start — not a bad λ.** λ cannot be "wrong"; it defines which optimum you are aiming at.
+Sweeps the learning side: how finely to discretise confidence, and the episode budget.
 
 ### Step 4 — Inspect and compare
 
 ```bash
-python CODE/training/agent/analyze_policy.py --rl-model <model.json> --n-samples 500
-python CODE/training/agent/compare_strategies.py   --rl-model <model.json> --n-samples 300
-python CODE/training/agent/plot_strategies.py \
+python CODE/training/agent/analysis/analyze_policy.py --rl-model <model.json> --n-samples 500
+python CODE/training/agent/analysis/compare_strategies.py   --rl-model <model.json> --n-samples 300
+python CODE/training/agent/analysis/plot_strategies.py \
   --results-csv docs/figures/strategy_comparison/strategy_comparison.csv \
 ```
 
 `analyze_policy` shows which bundles get acquired and their average confidence contribution. `compare_strategies` compares against three fixed baselines (predict-immediately, greedy-to-threshold, full acquisition).
 
+**Still missing:** the Best Fixed Subset baseline — the best-scoring subset within the agent's time budget, a filter and argmax over the 1,024 already-scored subsets. Until it exists the agent's accuracy has nothing to be judged against.
+
 ### Everything at once
 
 ```bash
-LAMBDA=0.01 bash CODE/training/agent/full_evaluation.sh
+LAMBDA=0.01 bash CODE/training/agent/run_all.sh
 ```
 
 ---

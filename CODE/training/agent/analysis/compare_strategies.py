@@ -19,7 +19,6 @@ two.)
 
 import argparse
 import json
-from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -27,7 +26,9 @@ import pandas as pd
 from tqdm import tqdm
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+from pathlib import Path
+_AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import (
     load_split, prepare_xy, bundle_feature_columns, BUNDLE_NAMES,
     unify_categorical_dtypes, mask_bundles,
@@ -126,17 +127,18 @@ class StrategyEvaluator:
     @staticmethod
     def strategy_learned_policy(
         env: MDPEnvironment,
-        policy: Dict[int, int],
+        learner,
     ) -> Dict:
-        """Strategy 4: Use learned Q-learning policy."""
+        """Strategy 4: Use the learned Q-learning policy.
+
+        Asks the learner for an action rather than indexing a {mask: action}
+        dict, because the state is (mask, confidence bin) -- the confidence is
+        exactly what lets the policy treat two collisions differently.
+        """
         steps = 0
         while True:
             mask = env.current_mask
-            if mask in policy:
-                action = policy[mask]
-            else:
-                # Fallback if mask not in policy
-                action = 0
+            action = learner.act(mask, env.current_proba.max())
 
             if action == 0:
                 # Predict & terminate
@@ -185,7 +187,7 @@ def main():
         print(f"Loading RL model from {args.rl_model}...")
         learner = QLearner()
         learner.load(args.rl_model)
-        rl_policy = learner.get_policy()
+        rl_policy = learner
     else:
         print("No RL model provided; will evaluate strategies without learned policy")
         rl_policy = None

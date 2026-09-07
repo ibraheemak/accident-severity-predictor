@@ -10,7 +10,6 @@ Shows:
 
 import argparse
 import json
-from pathlib import Path
 from collections import defaultdict
 
 import numpy as np
@@ -18,7 +17,9 @@ import pandas as pd
 from tqdm import tqdm
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+from pathlib import Path
+_AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import (
     load_split, prepare_xy, bundle_feature_columns, BUNDLE_NAMES,
     unify_categorical_dtypes, mask_bundles,
@@ -51,7 +52,7 @@ def analyze_policy(policy, learner, X_test, y_test, n_samples=500):
 
         while not env.is_terminal:
             old_confidence = env.current_proba.max()
-            action = policy.get(mask, 0)
+            action = learner.act(mask, old_confidence)
             action_counts[action] += 1
 
             if action == 0:

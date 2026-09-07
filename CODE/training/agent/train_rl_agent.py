@@ -14,13 +14,14 @@ Usage:
 
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+from pathlib import Path
+_AGENT = Path(__file__).resolve().parents[0]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import (
     load_split, prepare_xy, bundle_feature_columns, BUNDLE_NAMES, CATEGORICAL_COLS,
     unify_categorical_dtypes,
@@ -28,6 +29,7 @@ from train_classifier import (
 
 from mdp_environment import MDPEnvironment
 from ql_solver import QLearner
+from seeding import one_step_seed
 from bundle_costs import get_costs_dict, print_costs_summary
 
 
@@ -47,12 +49,16 @@ def main():
                         help="α parameter for step rewards")
     parser.add_argument("--terminal-weight", type=float, default=1.0,
                         help="β parameter for terminal reward")
+    parser.add_argument("--conf-bins", type=int, default=5,
+                        help="confidence bins in the state (p_t discretised); "
+                             "1 = mask-only ablation")
     parser.add_argument("--cost-scale", type=float, default=1.0,
                         help="lambda: multiplier converting bundle seconds into "
-                             "reward units (calibrate with plan_optimal_policy.py)")
+                             "reward units; sweep it with tune_rewards.py)")
     parser.add_argument("--warm-start", action="store_true",
-                        help="seed the Q-table from the exact DP solution over "
-                             "the bundle-sweep valid accuracies (plan-then-learn)")
+                        help="seed the Q-table from measured one-step subset "
+                             "values (see seeding.py); strongly recommended -- "
+                             "a cold start plateaus after one bundle")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
     parser.add_argument("--output-dir", type=Path, default=Path("models/rl_agents"),
@@ -65,7 +71,8 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     model_name = (f"ql_normalized_binary_"
-                  f"a{args.alpha}_g{args.gamma}_e{args.epsilon}_c{args.cost_scale}")
+                  f"a{args.alpha}_g{args.gamma}_e{args.epsilon}"
+                  f"_c{args.cost_scale}_b{args.conf_bins}")
     model_path = output_dir / f"{model_name}.json"
 
     # Load data (normalized, binary)
@@ -97,16 +104,18 @@ def main():
         step_weight=args.step_weight,
         terminal_weight=args.terminal_weight,
         bundle_costs=bundle_costs,
+        n_conf_bins=args.conf_bins,
         seed=args.seed,
     )
 
     if args.warm_start:
         sweep_csv = Path("docs/figures/bundle_sweep/bundle_sweep_normalized_binary.csv")
         sweep = pd.read_csv(sweep_csv).set_index("mask")
-        terminal_values = (args.terminal_weight * sweep["valid_accuracy"]).to_dict()
-        learner.warm_start(terminal_values)
-        print(f"Warm-started Q-table from exact DP over {len(sweep)} masks "
-              f"({sweep_csv})")
+        learner.warm_start(one_step_seed(
+            sweep["valid_accuracy"].to_dict(), bundle_costs,
+            n_conf_bins=args.conf_bins, terminal_weight=args.terminal_weight))
+        print(f"Seeded Q-table from measured one-step values over "
+              f"{len(sweep)} masks ({sweep_csv})")
 
     if args.evaluate_only:
         print(f"\nLoading model from {model_path}...")
@@ -136,16 +145,20 @@ def main():
     eval_stats["results"].to_csv(results_path, index=False)
     print(f"  Results saved to {results_path}")
 
-    # Print policy summary
-    print("\nPolicy summary (first 10 masks):")
+    # Does the policy actually differ across confidence bins? If every bin of a
+    # mask picks the same action, the agent is not using p_t and has collapsed
+    # to a fixed shopping list.
     policy = learner.get_policy()
-    for mask in range(min(10, 1 << 10)):
-        action = policy[mask]
-        if action == 0:
-            action_str = "Predict"
-        else:
-            action_str = f"Acquire bundle {action-1}"
-        print(f"  Mask {mask:04b}: {action_str}")
+    nbins = max(args.conf_bins, 1)
+    varying = sum(1 for m in range(1 << 10)
+                  if len({policy[(m, b)] for b in range(nbins)}) > 1)
+    print(f"\nMasks whose action depends on confidence: {varying}/1024")
+    print("Policy at mask 0 (start of every episode), by confidence bin:")
+    for b in range(nbins):
+        a = policy[(0, b)]
+        lo = 0.5 + 0.5 * b / nbins
+        print(f"  confidence {lo:.2f}-{lo + 0.5/nbins:.2f}: "
+              f"{'Predict now' if a == 0 else f'Acquire {BUNDLE_NAMES[a-1]}'}")
 
 
 if __name__ == "__main__":

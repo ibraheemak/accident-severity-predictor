@@ -58,7 +58,7 @@ Floor (timestamp only) **0.5408** · full acquisition **0.7374** · whole action
 
 **Value saturates at five bundles.** `vehicles + casualties + casualty_demographics + road_class + road_environment` reaches 0.7374 — matching full acquisition. Past that, successive best-at-size gains are +0.0009, +0.0013, −0.0001, −0.0024, +0.0004: two of the five are negative, and all are within retrain noise.
 
-**`meteo` is not merely redundant but harmful**: −0.0010 mean marginal, helping in only 28% of subsets. The exact planner in `../plan_optimal_policy.py` independently drops it even when acquisition is free, which is the same finding by a different route.
+**`meteo` is not merely redundant but harmful**: −0.0010 mean marginal, helping in only 28% of subsets. It is also absent from the best-scoring subset of any size, which is the same finding by a different route.
 
 **Value and cost are positively correlated.** The three most valuable bundles are also the three slowest to acquire, by two orders of magnitude (seconds vs milliseconds). There is no free lunch in the action space, which is precisely why the λ exchange rate has to be an explicit choice rather than an assumption — see `../README.md`.
 

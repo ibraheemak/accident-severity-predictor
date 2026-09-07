@@ -14,7 +14,6 @@ that duplicated voi/ with a weaker metric; that chart was removed.)
 
 import argparse
 from ast import literal_eval
-from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
@@ -22,7 +21,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+from pathlib import Path
+_AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import BUNDLE_NAMES
 from bundle_costs import BUNDLE_COSTS, BUNDLE_TIERS_COSTS
 

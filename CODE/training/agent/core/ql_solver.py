@@ -35,6 +35,7 @@ class QLearner:
         step_weight: float = 1.0,
         terminal_weight: float = 1.0,
         bundle_costs: Dict[int, float] = None,
+        n_conf_bins: int = 5,
         seed: int = 42,
     ):
         """Initialize Q-learner.
@@ -54,6 +55,7 @@ class QLearner:
         self.step_weight = step_weight
         self.terminal_weight = terminal_weight
         self.bundle_costs = bundle_costs or {i: 0.0 for i in range(10)}
+        self.n_conf_bins = n_conf_bins
         self.seed = seed
 
         # Q-table: Q[mask][action] = expected discounted future reward
@@ -67,37 +69,49 @@ class QLearner:
 
         np.random.seed(seed)
 
-    def warm_start(self, terminal_values: Dict[int, float]):
-        """Initialize the Q-table from the exact DP solution of the mask-level
-        MDP (plan-then-learn).
+    def warm_start(self, q_table: Dict[tuple, Dict[int, float]]):
+        """Seed the Q-table with precomputed values (plan-then-learn).
 
-        Because transitions are deterministic and the expected terminal reward
-        of stopping at mask m is known in advance (beta * that subset
-        classifier's validation accuracy, measured by bundle_sweep.py), the
-        optimal Q-values can be computed in closed form over the subset
-        lattice. Seeding the table with them means greedy evaluation follows
-        the planner-optimal path immediately, and subsequent Q-learning
-        episodes refine rather than discover -- pure epsilon-greedy discovery
-        of a specific multi-bundle path from 0/1 terminal rewards needs far
-        more episodes than is practical.
+        This method only loads values -- it contains no logic for producing
+        them. The seed lives in seeding.py (one_step_seed), so
+        the learner has no planner inside it and any source of initial values
+        works here equally well.
+
+        Seeding matters because cold-start epsilon-greedy essentially never
+        discovers a specific multi-bundle acquisition sequence from a 0/1
+        reward delivered only at the end of the episode; it plateaus after a
+        single bundle. With a seed, training refines rather than discovers.
 
         Args:
-            terminal_values: {mask: expected terminal reward}, typically
-                terminal_weight * valid_accuracy per mask from the bundle
-                sweep CSV. Must cover every mask 0..1023.
+            q_table: {(mask, confidence_bin): {action: q}}.
         """
-        V: Dict[int, float] = {}
-        n_masks = 1 << 10
-        for m in sorted(range(n_masks), key=lambda x: bin(x).count("1"),
-                        reverse=True):
-            self.Q[m][0] = terminal_values[m]
-            best = terminal_values[m]
-            for i in range(10):
-                if not m >> i & 1:
-                    q = -self.bundle_costs.get(i, 0.0) + self.gamma * V[m | (1 << i)]
-                    self.Q[m][i + 1] = q
-                    best = max(best, q)
-            V[m] = best
+        for key, actions in q_table.items():
+            for action, q in actions.items():
+                self.Q[key][action] = q
+
+    def conf_bin(self, confidence: float) -> int:
+        """Discretise the classifier's current confidence into a bin index.
+
+        The MDP formulation defines the state as (x_free, x_acquired, m_t, p_t),
+        but a tabular value function needs discrete states and p_t is a
+        continuous distribution. Binning max(p_t) is the tabular-compatible way
+        to keep it: it is what lets two collisions holding the SAME bundles be
+        told apart, which is the whole point of acquiring actively rather than
+        following a fixed shopping list.
+
+        n_conf_bins=1 collapses this to nothing and recovers the mask-only
+        policy, which is the ablation baseline.
+        """
+        if self.n_conf_bins <= 1:
+            return 0
+        # Binary max-probability lives in [0.5, 1.0]; three-class in [1/3, 1].
+        lo = 0.5
+        frac = (confidence - lo) / (1.0 - lo)
+        return int(np.clip(frac * self.n_conf_bins, 0, self.n_conf_bins - 1))
+
+    def _key(self, mask: int, confidence: float):
+        """State key for the Q-table: the acquisition mask plus a confidence bin."""
+        return (mask, self.conf_bin(confidence))
 
     def _get_actions(self, mask: int) -> List[int]:
         """Get valid actions for a given mask.
@@ -111,25 +125,28 @@ class QLearner:
                 actions.append(i + 1)
         return actions
 
-    def _select_action(self, mask: int, training: bool = True) -> int:
+    def _select_action(self, key, training: bool = True) -> int:
         """Select action using epsilon-greedy policy.
 
         Args:
-            mask: Current state (bitmask)
+            key: (mask, confidence_bin) state key
             training: If True, use epsilon-greedy; if False, use greedy
 
         Returns:
             Action index (0-10)
         """
-        actions = self._get_actions(mask)
+        actions = self._get_actions(key[0])
 
         if training and np.random.rand() < self.epsilon:
-            return np.random.choice(actions)
+            return int(np.random.choice(actions))
 
-        # Greedy: pick action with highest Q-value
-        q_values = [self.Q[mask][a] for a in actions]
-        best_idx = np.argmax(q_values)
-        return actions[best_idx]
+        q_values = [self.Q[key][a] for a in actions]
+        return actions[int(np.argmax(q_values))]
+
+    def act(self, mask: int, confidence: float) -> int:
+        """Greedy action for a live state. The accessor other scripts should
+        use, so they never need to know how the Q-table is keyed."""
+        return self._select_action(self._key(mask, confidence), training=False)
 
     def train_episode(
         self,
@@ -144,30 +161,30 @@ class QLearner:
             (episode_return, episode_length)
         """
         env.reset()
-        mask = env.current_mask
+        key = self._key(env.current_mask, env.current_proba.max())
         episode_return = 0.0
         gamma_power = 1.0
 
         while not env.is_terminal:
-            action = self._select_action(mask, training=True)
+            action = self._select_action(key, training=True)
             state, reward, done = env.step(action)
 
             episode_return += gamma_power * reward
             gamma_power *= self.gamma
 
             # Q-learning update
-            new_mask = state["mask"]
+            new_key = self._key(state["mask"], state["max_proba"])
             if done:
                 # Terminal state: no future value
                 target = reward
             else:
                 # Bootstrap from next state
-                next_actions = self._get_actions(new_mask)
-                next_q_values = [self.Q[new_mask][a] for a in next_actions]
+                next_actions = self._get_actions(new_key[0])
+                next_q_values = [self.Q[new_key][a] for a in next_actions]
                 target = reward + self.gamma * max(next_q_values)
 
-            self.Q[mask][action] += self.alpha * (target - self.Q[mask][action])
-            mask = new_mask
+            self.Q[key][action] += self.alpha * (target - self.Q[key][action])
+            key = new_key
 
         self.episode_rewards.append(episode_return)
         self.episode_lengths.append(len(env.acquisition_history))
@@ -183,18 +200,18 @@ class QLearner:
             (episode_return, info)
         """
         env.reset()
-        mask = env.current_mask
+        key = self._key(env.current_mask, env.current_proba.max())
         episode_return = 0.0
         gamma_power = 1.0
 
         while not env.is_terminal:
-            action = self._select_action(mask, training=False)
+            action = self._select_action(key, training=False)
             state, reward, done = env.step(action)
 
             episode_return += gamma_power * reward
             gamma_power *= self.gamma
 
-            mask = state["mask"]
+            key = self._key(state["mask"], state["max_proba"])
 
         info = env.get_optimal_path_info()
         return episode_return, info
@@ -297,18 +314,19 @@ class QLearner:
             "results": df_results,
         }
 
-    def get_policy(self) -> Dict[int, int]:
-        """Extract greedy policy from Q-table.
+    def get_policy(self) -> Dict[tuple, int]:
+        """Extract the greedy policy from the Q-table.
 
         Returns:
-            Dictionary mapping mask -> best action
+            {(mask, confidence_bin): best action}. Prefer act(mask, confidence)
+            for live use -- it does the binning for you.
         """
         policy = {}
-        for mask in range(1 << 10):  # All 1024 possible masks
+        for mask in range(1 << 10):
             actions = self._get_actions(mask)
-            q_values = [self.Q[mask][a] for a in actions]
-            best_action = actions[np.argmax(q_values)]
-            policy[mask] = best_action
+            for b in range(max(self.n_conf_bins, 1)):
+                q_values = [self.Q[(mask, b)][a] for a in actions]
+                policy[(mask, b)] = actions[int(np.argmax(q_values))]
         return policy
 
     def save(self, path: Path):
@@ -327,11 +345,13 @@ class QLearner:
                 "epsilon": float(self.epsilon),
                 "step_weight": float(self.step_weight),
                 "terminal_weight": float(self.terminal_weight),
+                "n_conf_bins": int(self.n_conf_bins),
             },
             "bundle_costs": {str(k): float(v) for k, v in self.bundle_costs.items()},
+            # Keys are "mask:bin" -- JSON has no tuple keys.
             "q_table": {
-                str(mask): {str(action): float(q) for action, q in actions.items()}
-                for mask, actions in self.Q.items()
+                f"{mask}:{b}": {str(a): float(q) for a, q in actions.items()}
+                for (mask, b), actions in self.Q.items()
             },
         }
 
@@ -352,9 +372,11 @@ class QLearner:
         self.epsilon = data["hyperparams"]["epsilon"]
         self.step_weight = data["hyperparams"]["step_weight"]
         self.terminal_weight = data["hyperparams"]["terminal_weight"]
+        self.n_conf_bins = data["hyperparams"].get("n_conf_bins", 1)
 
         self.Q.clear()
-        for mask_str, actions in data["q_table"].items():
-            mask = int(mask_str)
+        for key_str, actions in data["q_table"].items():
+            mask, _, b = key_str.partition(":")
+            key = (int(mask), int(b) if b else 0)
             for action_str, q in actions.items():
-                self.Q[mask][int(action_str)] = q
+                self.Q[key][int(action_str)] = q

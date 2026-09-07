@@ -1,16 +1,52 @@
 {
-  "n_samples": 300,
+  "n_samples": 60,
   "action_distribution": {
-    "7": 300,
-    "0": 300
+    "2": 60,
+    "5": 60,
+    "1": 60,
+    "7": 60,
+    "8": 31,
+    "6": 60,
+    "4": 30,
+    "3": 31,
+    "10": 26,
+    "0": 60,
+    "9": 10
   },
   "bundle_value_mean": {
-    "crash_history": 0.05449226498603821
+    "casualties": 0.06272996217012405,
+    "road_environment": 0.03249881789088249,
+    "vehicles": 0.011705119162797928,
+    "crash_history": 0.016608815640211105,
+    "aadf": 0.005720292218029499,
+    "junction": -0.0029925196431577206,
+    "road_class": 0.0016131302108988166,
+    "casualty_demographics": 0.01841980218887329,
+    "meteo": -0.0006585602532140911,
+    "osm": -0.0022712349891662598
   },
   "bundle_value_std": {
-    "crash_history": 0.07140037417411804
+    "casualties": 0.07241281121969223,
+    "road_environment": 0.07836540788412094,
+    "vehicles": 0.07082781195640564,
+    "crash_history": 0.05236215889453888,
+    "aadf": 0.026787981390953064,
+    "junction": 0.03270524740219116,
+    "road_class": 0.040239863097667694,
+    "casualty_demographics": 0.06556907296180725,
+    "meteo": 0.03358757123351097,
+    "osm": 0.027928592637181282
   },
   "bundle_value_count": {
-    "crash_history": 300
+    "casualties": 60,
+    "road_environment": 60,
+    "vehicles": 60,
+    "crash_history": 60,
+    "aadf": 31,
+    "junction": 60,
+    "road_class": 30,
+    "casualty_demographics": 31,
+    "meteo": 26,
+    "osm": 10
   }
 }

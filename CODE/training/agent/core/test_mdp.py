@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Quick test of MDP environment and QL solver."""
 
+
 import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+_AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import (
     load_split, prepare_xy, bundle_feature_columns, BUNDLE_NAMES,
     unify_categorical_dtypes,
@@ -83,8 +84,11 @@ def test_qlearner():
 
     # Get policy
     policy = learner.get_policy()
-    print(f"  Policy for mask=0 (free info only): action={policy[0]}")
-    print(f"  Policy for mask=1 (bundle 0 acquired): action={policy[1]}")
+    # Keys are (mask, confidence_bin) -- the state includes binned p_t.
+    print(f"  Policy at mask=0, lowest confidence bin:  action={policy[(0, 0)]}")
+    print(f"  Policy at mask=0, highest confidence bin: "
+          f"action={policy[(0, learner.n_conf_bins - 1)]}")
+    print(f"  Policy at mask=1, lowest confidence bin:  action={policy[(1, 0)]}")
 
     print("  ✓ QLearner tests passed\n")
 

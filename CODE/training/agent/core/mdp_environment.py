@@ -15,7 +15,6 @@ and loads the pre-trained classifier for the new mask.
 """
 
 import json
-from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -23,7 +22,9 @@ import pandas as pd
 import xgboost as xgb
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+from pathlib import Path
+_AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import (
     BINARY_LABELS, BUNDLE_COLS, BUNDLE_NAMES, CATEGORICAL_COLS,
     MODEL_DIR, N_BUNDLES, bundle_feature_columns, mask_bundles,

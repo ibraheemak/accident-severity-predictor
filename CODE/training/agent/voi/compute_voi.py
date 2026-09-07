@@ -23,14 +23,14 @@ Usage (from the repo root):
 """
 
 import argparse
-import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))          # agent/
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "train"))  # training/train/
+import sys
+from pathlib import Path
+_AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
+sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import BUNDLE_NAMES, BUNDLE_TIERS, N_BUNDLES
 from bundle_costs import BUNDLE_COSTS
 
