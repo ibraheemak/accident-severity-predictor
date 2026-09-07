@@ -40,7 +40,16 @@ Trains an agent at each λ and reports accuracy, bundles acquired, seconds spent
 python CODE/training/agent/sweeps/tune_learning.py --conf-bins 1 3 5 8
 ```
 
-Sweeps the learning side: how finely to discretise confidence, and the episode budget.
+Sweeps the learning side: how finely to discretise confidence, and the episode budget. **3 bins is the tuned default** — see the bin-count table in [README.md](README.md#discretising-the-confidence). `--conf-bins 1` is the mask-only ablation, which is the comparison that shows adaptivity is doing anything at all.
+
+Reward weights have their own sweep:
+
+```bash
+python CODE/training/agent/sweeps/tune_rewards.py                    # alpha x beta grid
+python CODE/training/agent/sweeps/tune_rewards.py --scale-check      # proves beta is redundant
+```
+
+`--scale-check` runs k×(α, β, λ) for k ∈ {0.5, 1, 2}. All three share the same ratios, so if the reward is scale-invariant they must give identical policies — and they do, to four decimals. That is the evidence for fixing β = 1 rather than tuning it.
 
 ### Step 4 — Inspect and compare
 

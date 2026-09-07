@@ -22,9 +22,9 @@ Task: **normalized** data variant, **binary** Slight vs. Severe. Raw/masked vari
 
 | | what it scales | changes the optimal policy? |
 |---|---|---|
-| **β** `--terminal-weight` | value of a correct prediction | **No.** Scaling β, α and λ together by any constant leaves the policy identical — only ratios matter. Fix β = 1. |
+| **β** `--terminal-weight` | value of a correct prediction | **No — measured.** Scaling β, α and λ together leaves every Q-value scaled equally and `argmax` unchanged. Verified: three configurations at k×(0.05, 1, 0.01) for k ∈ {0.5, 1, 2} gave accuracy 0.6980 and 8.25 bundles, *identical to four decimals*. β only fixes units. Leave at 1. |
 | **λ** `--cost-scale` | price of one second of acquisition time, *in accuracy points* | **Yes — this is the real knob.** |
-| **α** `--step-weight` | shaping bonus for confidence gained | Barely. Summed over an episode the ΔConfidence terms telescope to `α·(final − initial confidence)`, so α nudges the agent toward confident stopping states and helps exploration, but does not redefine the objective. Keep it small (0.05). |
+| **α** `--step-weight` | shaping bonus for confidence gained | **Barely — measured.** Summed over an episode the ΔConfidence terms telescope to `α·(final − initial confidence)`, so α reduces to a bonus on the final state. Sweeping α ∈ {0, 0.05, 0.2, 1.0} moved accuracy by 0.015 total, non-monotonically (0.7133 / 0.6980 / 0.7040 / 0.7107) — inside single-seed noise. α = 0 scored highest, so the shaping term may be droppable entirely. |
 
 So there is really **one** parameter: **λ**.
 
@@ -56,6 +56,33 @@ python CODE/training/agent/sweeps/tune_learning.py    # confidence bins, episode
 # Or run everything
 LAMBDA=0.01 bash CODE/training/agent/run_all.sh
 ```
+
+---
+
+## Discretising the confidence
+
+`p_t` is a continuous probability, but a lookup table needs keys you can land on more than once — `Q[(19, 0.7231947)]` would be created, used once, and never revisited, so nothing would ever be learned. `max(p_t)` is therefore binned ([core/ql_solver.py](core/ql_solver.py), `conf_bin`):
+
+```python
+lo = 0.5                                    # two-class max-prob floor
+frac = (confidence - lo) / (1.0 - lo)       # rescale [0.5,1.0] -> [0,1]
+int(np.clip(frac * n_bins, 0, n_bins - 1))  # -> bin index
+```
+
+With 3 bins: 0.50–0.67 → bin 0, 0.67–0.83 → bin 1, 0.83–1.00 → bin 2. The `clip` matters only at confidence exactly 1.0, which would otherwise index a bin that doesn't exist.
+
+**How many bins.** A real trade-off: too few and the agent cannot tell an easy call from a hard one (1 bin *is* the mask-only agent); too many and the 1024×bins states each get too few visits to learn anything. Swept at 12,000 training episodes / 2,500 eval:
+
+| bins | states | accuracy | visits per state |
+|---|---|---|---|
+| 1 (mask only) | 1,024 | 0.7112 | ~94 |
+| **3** | **3,072** | **0.7316** | ~31 |
+| 5 | 5,120 | 0.7048 | ~19 |
+| 8 | 8,192 | 0.7276 | ~12 |
+| 12 | 12,288 | 0.7228 | ~8 |
+| 20 | 20,480 | 0.7132 | ~5 |
+
+**3 is the default** in both `QLearner` and `--conf-bins`. The decline from 8 → 12 → 20 is the visit-count effect; the 5-bin row breaking that trend is single-seed noise, so the 3-vs-8 ordering is not solid without repeated seeds.
 
 ---
 
