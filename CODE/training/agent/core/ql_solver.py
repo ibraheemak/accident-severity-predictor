@@ -35,7 +35,7 @@ class QLearner:
         step_weight: float = 1.0,
         terminal_weight: float = 1.0,
         bundle_costs: Dict[int, float] = None,
-        n_conf_bins: int = 5,
+        n_conf_bins: int = 3,
         seed: int = 42,
     ):
         """Initialize Q-learner.
@@ -47,6 +47,10 @@ class QLearner:
             step_weight: α parameter for step rewards (confidence improvement)
             terminal_weight: β parameter for terminal reward (accuracy)
             bundle_costs: Dict mapping bundle index (0-9) to acquisition cost
+            n_conf_bins: Confidence bins in the state (p_t discretised). 3 was
+                best in the 12k-episode sweep; more bins split the table into
+                states too rarely visited to learn from. 1 disables the
+                confidence term entirely (mask-only ablation).
             seed: Random seed for reproducibility
         """
         self.alpha = alpha

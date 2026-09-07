@@ -49,9 +49,9 @@ def main():
                         help="α parameter for step rewards")
     parser.add_argument("--terminal-weight", type=float, default=1.0,
                         help="β parameter for terminal reward")
-    parser.add_argument("--conf-bins", type=int, default=5,
+    parser.add_argument("--conf-bins", type=int, default=3,
                         help="confidence bins in the state (p_t discretised); "
-                             "1 = mask-only ablation")
+                             "3 was best in the sweep, 1 = mask-only ablation")
     parser.add_argument("--cost-scale", type=float, default=1.0,
                         help="lambda: multiplier converting bundle seconds into "
                              "reward units; sweep it with tune_rewards.py)")
