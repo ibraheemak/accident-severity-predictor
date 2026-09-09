@@ -42,7 +42,16 @@ python CODE/training/agent/sweeps/tune_learning.py --conf-bins 1 3 5 8
 
 Sweeps the learning side: how finely to discretise confidence, and the episode budget. **3 bins is the tuned default** — see the bin-count table in [README.md](README.md#discretising-the-confidence). `--conf-bins 1` is the mask-only ablation, which is the comparison that shows adaptivity is doing anything at all.
 
-Reward weights have their own sweep:
+For a proper search rather than a grid, use the Optuna tuner — it searches continuous ranges and models interactions between parameters:
+
+```bash
+python CODE/training/agent/sweeps/optuna_tune.py --n-trials 40 --seeds 2
+tail -f models/rl_agents/optuna/run.log
+```
+
+It optimises `accuracy − λ·seconds` (see [README.md](README.md#tuning) for why both terms), reports macro F1 alongside, resumes if interrupted, and warns you when the winning trial's lead is smaller than its own seed noise.
+
+Reward weights have their own grid:
 
 ```bash
 python CODE/training/agent/sweeps/tune_rewards.py                    # alpha x beta grid

@@ -115,7 +115,7 @@ def main():
     rows = []
     for alpha, beta, lam in tqdm(configs, desc="reward sweep"):
         costs = {i: s * lam for i, s in seconds.items()}
-        learner = QLearner(alpha=args.lr, gamma=args.gamma, epsilon=args.epsilon,
+        learner = QLearner(lr=args.lr, gamma=args.gamma, epsilon=args.epsilon,
                            step_weight=alpha, terminal_weight=beta,
                            bundle_costs=costs, n_conf_bins=args.conf_bins,
                            seed=args.seed)

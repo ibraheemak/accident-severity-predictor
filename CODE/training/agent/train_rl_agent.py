@@ -8,7 +8,7 @@ a prediction, balancing accuracy against acquisition costs.
 Usage:
     python train_rl_agent.py                    # Train on 1000 samples
     python train_rl_agent.py --n-train 5000     # More training episodes
-    python train_rl_agent.py --alpha 0.05       # Custom learning rate
+    python train_rl_agent.py --lr 0.05          # Custom learning rate
     python train_rl_agent.py --evaluate-only    # Load and evaluate existing model
 """
 
@@ -39,8 +39,9 @@ def main():
                         help="Number of training episodes")
     parser.add_argument("--n-eval", type=int, default=500,
                         help="Number of evaluation episodes")
-    parser.add_argument("--alpha", type=float, default=0.1,
-                        help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.1,
+                        help="Q-learning rate. NOT the reward's alpha -- that "
+                             "is --step-weight.")
     parser.add_argument("--gamma", type=float, default=0.99,
                         help="Discount factor")
     parser.add_argument("--epsilon", type=float, default=0.1,
@@ -71,7 +72,7 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     model_name = (f"ql_normalized_binary_"
-                  f"a{args.alpha}_g{args.gamma}_e{args.epsilon}"
+                  f"lr{args.lr}_g{args.gamma}_e{args.epsilon}"
                   f"_c{args.cost_scale}_b{args.conf_bins}")
     model_path = output_dir / f"{model_name}.json"
 
@@ -98,7 +99,7 @@ def main():
 
     # Initialize learner
     learner = QLearner(
-        alpha=args.alpha,
+        lr=args.lr,
         gamma=args.gamma,
         epsilon=args.epsilon,
         step_weight=args.step_weight,

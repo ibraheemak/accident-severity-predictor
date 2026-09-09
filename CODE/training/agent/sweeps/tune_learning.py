@@ -94,7 +94,7 @@ def main():
 
     rows = []
     for bins, n_train, eps in tqdm(configs, desc="sweep"):
-        learner = QLearner(alpha=args.lr, gamma=args.gamma, epsilon=eps,
+        learner = QLearner(lr=args.lr, gamma=args.gamma, epsilon=eps,
                            step_weight=args.step_weight, terminal_weight=1.0,
                            bundle_costs=costs, n_conf_bins=bins, seed=args.seed)
         learner.warm_start(one_step_seed(valid_acc, costs, n_conf_bins=bins))

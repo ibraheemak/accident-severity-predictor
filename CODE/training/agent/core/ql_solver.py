@@ -29,7 +29,7 @@ class QLearner:
 
     def __init__(
         self,
-        alpha: float = 0.1,
+        lr: float = 0.1,
         gamma: float = 0.99,
         epsilon: float = 0.1,
         step_weight: float = 1.0,
@@ -41,7 +41,9 @@ class QLearner:
         """Initialize Q-learner.
 
         Args:
-            alpha: Learning rate (0-1)
+            lr: Q-learning rate (0-1). Named `lr`, NOT `alpha`, because the
+                report's alpha is step_weight below -- two unrelated quantities
+                that were both called alpha until Sept 2026.
             gamma: Discount factor (0-1)
             epsilon: Exploration rate for epsilon-greedy policy (0-1)
             step_weight: α parameter for step rewards (confidence improvement)
@@ -53,7 +55,7 @@ class QLearner:
                 confidence term entirely (mask-only ablation).
             seed: Random seed for reproducibility
         """
-        self.alpha = alpha
+        self.lr = lr
         self.gamma = gamma
         self.epsilon = epsilon
         self.step_weight = step_weight
@@ -187,7 +189,7 @@ class QLearner:
                 next_q_values = [self.Q[new_key][a] for a in next_actions]
                 target = reward + self.gamma * max(next_q_values)
 
-            self.Q[key][action] += self.alpha * (target - self.Q[key][action])
+            self.Q[key][action] += self.lr * (target - self.Q[key][action])
             key = new_key
 
         self.episode_rewards.append(episode_return)
@@ -344,7 +346,7 @@ class QLearner:
 
         data = {
             "hyperparams": {
-                "alpha": float(self.alpha),
+                "lr": float(self.lr),
                 "gamma": float(self.gamma),
                 "epsilon": float(self.epsilon),
                 "step_weight": float(self.step_weight),
@@ -371,7 +373,8 @@ class QLearner:
         with open(path) as f:
             data = json.load(f)
 
-        self.alpha = data["hyperparams"]["alpha"]
+        hp = data["hyperparams"]
+        self.lr = hp.get("lr", hp.get("alpha", 0.1))   # "alpha" = pre-Sept-2026 name
         self.gamma = data["hyperparams"]["gamma"]
         self.epsilon = data["hyperparams"]["epsilon"]
         self.step_weight = data["hyperparams"]["step_weight"]

@@ -73,7 +73,7 @@ def test_qlearner():
     X_train = X_train.head(10)
     y_train = y_train.head(10)
 
-    learner = QLearner(alpha=0.1, gamma=0.99, epsilon=0.1)
+    learner = QLearner(lr=0.1, gamma=1.0, epsilon=0.1)
     print(f"  Q-table initialized")
 
     # Train for a few episodes

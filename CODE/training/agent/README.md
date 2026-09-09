@@ -104,20 +104,103 @@ Those scores are the measured validation accuracies the bundle sweep already rec
 
 ---
 
+## Tuning
+
+Two vocabularies collide here, so to be explicit:
+
+| | what it is | flag |
+|---|---|---|
+| `lr` | the **Q-learning rate** — how far each experience moves an estimate | `--lr` |
+| `step_weight` | the **report's α** — weight on the ΔConfidence shaping term | `--step-weight` |
+
+Both were called `alpha` until September 2026. They are unrelated; `QLearner.load()` still accepts the old `"alpha"` key so earlier saved models open.
+
+### Which script to use
+
+**[sweeps/optuna_tune.py](sweeps/optuna_tune.py)** — the main tuner. TPE search over `lr` (0.005–0.5, log), `epsilon` (0.02–0.40), `conf_bins` (2–12) and `step_weight` (0–1). Same method §3.1 uses for the classifier. A grid tests a handful of hand-chosen points and cannot see between them or model interactions — the best `lr` at 3 bins need not be the best at 10, since 3,072 states versus 12,288 changes how often each is visited.
+
+```bash
+python CODE/training/agent/sweeps/optuna_tune.py --n-trials 40 --seeds 2
+tail -f models/rl_agents/optuna/run.log     # one line per trial
+```
+
+Resumable: trials persist to `models/rl_agents/optuna/optuna.db` as they complete, and re-running the same command continues rather than restarting.
+
+**[sweeps/tune_rewards.py](sweeps/tune_rewards.py)** — grid over the reward weights, plus `--scale-check`, which is the experiment proving β is redundant.
+
+**[sweeps/tune_learning.py](sweeps/tune_learning.py)** — grid over confidence bins and episode budget, when you want the whole curve rather than an optimum.
+
+### The objective, and what is deliberately not tuned
+
+```
+score = accuracy − λ · mean acquisition seconds
+```
+
+**Accuracy**, matching the agent's own terminal reward, so hyperparameters are selected against the same quantity the agent is trained on. Macro F1 is computed and printed for every trial — it is what the report quotes — but is not optimised. On this near-balanced binary task the two agree to 0.0001 across all 1,024 subsets, so the choice is nearly free. It would **not** be free on the 3-class task, where Fatal is rare enough that accuracy can be maximised by neglecting it.
+
+**Minus the time**, because quality rises monotonically with acquisitions: the highest-F1 policy is always "acquire all ten," which is guaranteed rather than discovered. Rank on quality alone and the tuner selects hyperparameters that make the agent ignore λ, defeating the point of active acquisition.
+
+**The α·ΔConfidence shaping term is excluded** even though it is part of the agent's reward, because `step_weight` is itself being tuned — including it would hand free objective to high-α trials and make them incomparable. Shaping is a training device, not a deployment goal.
+
+**λ is held fixed, not tuned.** It is the price of call-handler time — a deployment decision, where every value is a valid operating point. Hand it to an optimiser maximising quality and it drives λ to zero, "discovering" that free information is best. **β is held at 1**, being provably redundant. **γ = 1**: episodes cap at 10 steps and only the final mask determines the score.
+
+### Read the noise before the winner
+
+Each trial is one training run scored on sampled episodes, and the terminal reward is 0/1 — a noisy objective. A sampler handed noise will confidently report whichever configuration drew luckiest. Every trial therefore averages over multiple seeds, and the summary prints the winner's own seed-to-seed spread beside its lead over the median, with a warning when the lead is smaller. If that fires, the honest conclusion is *"these hyperparameters barely matter"* — which is a result, not a failure.
+
+One caveat that applies to any tuning run: to fit 40 trials in a few hours, trials use fewer training episodes than a final model would. The optimum found in an under-trained regime need not be the optimum at full budget, so **retrain the winning configuration at the full episode count before quoting its numbers.**
+
+---
+
 ## Results
 
-Reference points from the 1,024-subset sweep: timestamp-only floor **0.5408**, full acquisition **0.7374** test macro F1.
+Reference points from the 1,024-subset sweep: timestamp-only floor **0.5408**, best fixed subset **0.7396** (7 bundles), full acquisition **0.7374** test macro F1.
 
-Trained agents, 2,500 eval episodes at λ = 0.01, 12,000 training episodes:
+### Headline models — 3 seeds, 12,000 episodes, λ = 0.01
 
-| state | accuracy | bundles | distinct acquisition sets |
-|---|---|---|---|
-| mask only (`--conf-bins 1`) | 0.7112 | 10.00 | **1** |
-| mask + confidence (`--conf-bins 3`) | **0.7392** | 7.93 | 14 |
+| config | accuracy | macro F1 | seconds | distinct sets |
+|---|---|---|---|---|
+| tuned | 0.7175 ± 0.0090 | 0.7136 | **4.83** | 13 |
+| default (pre-tuning) | 0.7223 ± 0.0176 | 0.7186 | 5.54 | 10 |
+| mask-only (`--conf-bins 1`) | 0.7155 ± 0.0036 | 0.7113 | **6.26** | **1** |
 
-The `distinct sets` column is the point. With the mask alone the policy used **one** acquisition set for all 2,500 collisions — a fixed shopping list. With confidence in the state it used many, stopping early on calls the classifier was already sure about and pushing further on ambiguous ones. Higher accuracy *and* fewer questions.
+Reproduce with `python CODE/training/agent/analysis/final_model.py`.
 
-Episode length tracks difficulty as it should: episodes stopping at 4–5 bundles are right ~93% of the time; those running to all 10 are the genuinely hard ones, right ~60% of the time.
+**Adaptivity does not improve accuracy.** tuned − mask-only = **+0.0020** against a pooled sd of 0.0097 — inside noise. An earlier single-seed comparison reported 0.7392 vs 0.7112 and that gap did not survive repetition; **0.7392 was the top of a wide distribution, not a typical result** (the same configuration gave 0.7040 on the next seed).
+
+**What adaptivity buys is time.** 4.83 s versus 6.26 s — **1.43 seconds less per call for the same accuracy**, at roughly 5σ. For a dispatch setting that is arguably the more valuable axis.
+
+**Tuning bought nothing measurable.** tuned − default = −0.0048 against a pooled sd of 0.0198. Seed variance (±0.018) is larger than any hyperparameter effect we could find, so the agent is best described as *insensitive to its hyperparameters within the ranges tested*, with the one caveat that `lr` above ~0.15 is genuinely worse.
+
+### The operating curve — 19 values of λ, 3 seeds each
+
+```bash
+python CODE/training/agent/analysis/lambda_curve.py                    # λ = 0 … 0.10
+python CODE/training/agent/analysis/lambda_curve.py --lambdas 0.2 0.3 0.5 1 2 3 5 10 \
+       --out-dir docs/figures/lambda_curve_log                         # λ = 0.2 … 10
+python CODE/training/agent/analysis/plot_lambda_curve.py               # combine + figures
+```
+
+| λ | accuracy | seconds |
+|---|---|---|
+| 0 | 0.7111 | 6.16 |
+| **0.01** | **0.7175** | **4.83** |
+| 0.02 | 0.7123 | 3.17 |
+| 0.05 | 0.6753 | 1.69 |
+| 0.10 | 0.6488 | 0.75 |
+| 1.0 | 0.6203 | 0.09 |
+| 10 | 0.5533 | 0.003 |
+
+**Acquisition time falls 2,000× while accuracy falls 0.16.** That trade-off, not any single number, is the result: λ is a deployment decision, so the report should present the menu and name the operating point it assumes.
+
+Two features worth stating:
+
+- **λ = 0.01 dominates λ = 0** — higher accuracy in *less* time. When time is free the agent spends it on bundles that make the classifier worse (`meteo` has negative marginal value, three others are near zero). A small time charge prunes them.
+- **The knee is λ ≈ 0.02** — half the acquisition time of λ = 0 for 0.005 of accuracy. Past 0.03 accuracy drops in earnest.
+
+Figures in `docs/figures/lambda_curve/`: `lambda_operating_curve.png`, `lambda_bundle_heatmap.png`, `lambda_vs_metrics.png`. The heatmap shows which bundles the agent abandons as λ rises — the three ask-the-caller bundles go first (demographics by 0.02, casualties by 0.03, vehicles by 0.2), the millisecond lookups survive to λ ≈ 0.3, and `osm` is the last standing at λ ≈ 5, matching its break-even of value-alone / seconds = 4.2.
+
+**Caveat for any figure taken from this sweep:** points are means over 3 seeds and small non-monotonicities (the wobble around λ = 0.2–0.5) are inside run-to-run variation. Error bars were removed for legibility; the standard deviations remain in `lambda_curve_combined.csv`.
 
 ### Two bugs worth knowing about
 
@@ -125,11 +208,15 @@ Episode length tracks difficulty as it should: episodes stopping at 4–5 bundle
 
 **The state ignored `p_t` (fixed 6 Sept 2026).** The MDP formulation defines the state as `(x_free, x_acquired, m_t, p_t)`, but the Q-table was keyed on `m_t` alone — the environment computed the confidence and the learner discarded it. That is why the policy was identical for every collision.
 
-### Current limitation
+### Current limitations
 
-Confidence is **discretised**, because a tabular value function needs discrete states. Two collisions at 0.71 and 0.79 fall in the same bin and are treated identically. Removing that approximation means replacing the table with function approximation (a network taking `p_t` raw), which costs the interpretable policy and needs far more data — not warranted at 1,024 masks.
+**Confidence is discretised.** A tabular value function needs discrete states, so two collisions at 0.71 and 0.79 confidence fall in the same bin and are treated identically. Removing that means function approximation (a network taking `p_t` raw), which costs the readable policy and needs far more data — not warranted at 1,024 masks.
 
----
+**The learning signal is far too weak to find the optimal subset.** The terminal reward is 0/1, so a single visit to a state carries a standard deviation of 0.449. Distinguishing two subsets that differ by 0.01 in accuracy needs ~8,000 visits to that state; at 12,000 episodes over 1024×5 states the agent gets about **16**. It can easily tell "acquire nothing" from "acquire something" (a 0.20 gap) but cannot resolve differences among the *good* subsets (0.002–0.03). Consequently the agent largely inherits the greedy choices in its seed rather than improving on them, and lands ~0.028 below the best fixed subset at λ = 0.
+
+**Seed variance dominates.** ±0.018 across seeds for the same configuration, which is larger than any hyperparameter effect measured. Any single-run number from this agent should be treated as one draw, not a measurement.
+
+**Untested:** whether Q-learning adds anything over the seed at all. Evaluating the seeded policy with zero training episodes would settle it, and given the visit-count arithmetic above it is a live possibility that training is mostly inert.
 
 ## The 10 bundles
 
@@ -167,10 +254,14 @@ agent/
 │   └── test_mdp.py          smoke tests
 │
 ├── sweeps/               finding good settings
-│   ├── tune_rewards.py      sweep λ, the price of time
-│   └── tune_learning.py     sweep confidence bins and episode budget
+│   ├── optuna_tune.py       TPE search over the learning knobs  ← the main one
+│   ├── tune_rewards.py      grid over the reward weights α, β, λ
+│   └── tune_learning.py     grid over confidence bins and episode budget
 │
 ├── analysis/             understanding a trained agent
+│   ├── final_model.py          headline numbers: full budget, 3 seeds, error bars
+│   ├── lambda_curve.py         sweep λ — the cost/accuracy operating curve
+│   ├── plot_lambda_curve.py    figures for that sweep
 │   ├── analyze_policy.py       which bundles the policy acquires
 │   ├── compare_strategies.py   the policy against fixed baselines
 │   └── plot_strategies.py      figures for that comparison
