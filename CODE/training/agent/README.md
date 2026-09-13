@@ -45,7 +45,7 @@ python CODE/training/agent/voi/compute_voi.py && python CODE/training/agent/voi/
 
 # 2. Train
 python CODE/training/agent/train_rl_agent.py \
-  --warm-start --cost-scale 0.01 --step-weight 0.05 --conf-bins 3 \
+  --warm-start --cost-scale 0.01 --step-weight 0.05 --conf-bins 5 \
   --gamma 1.0 --n-train 12000 --n-eval 2500 \
   --output-dir models/rl_agents/main
 
@@ -71,10 +71,13 @@ int(np.clip(frac * n_bins, 0, n_bins - 1))  # -> bin index
 
 With 3 bins: 0.50–0.67 → bin 0, 0.67–0.83 → bin 1, 0.83–1.00 → bin 2. The `clip` matters only at confidence exactly 1.0, which would otherwise index a bin that doesn't exist.
 
-**How many bins.** A real trade-off: too few and the agent cannot tell an easy call from a hard one (1 bin *is* the mask-only agent); too many and the 1024×bins states each get too few visits to learn anything. Swept at 12,000 training episodes / 2,500 eval:
+**How many bins.** A real trade-off: too few and the agent cannot tell an easy call from a hard one (1 bin *is* the mask-only agent); too many and the 1024×bins states each get too few visits to learn anything — at 12,000 episodes of ~7 steps, 5 bins gives ~16 visits per state and 20 bins ~4.
 
-| bins | states | accuracy | visits per state |
-|---|---|---|---|
+`b` was included in the Optuna search ([sweeps/optuna_tune.py](sweeps/optuna_tune.py)) over the range 2–12, which selected **5** and attributed 26% of the objective variance to it — second only to the learning rate. **5 is the default** in both `QLearner` and `--conf-bins`.
+
+Differences across the searched range are within seed-to-seed variation (±0.018), so the setting is not critical and should not be reported as a tuned optimum. `--conf-bins 1` is outside the searched range and is used deliberately as the mask-only ablation.
+
+---|---|---|---|
 | 1 (mask only) | 1,024 | 0.7112 | ~94 |
 | **3** | **3,072** | **0.7316** | ~31 |
 | 5 | 5,120 | 0.7048 | ~19 |

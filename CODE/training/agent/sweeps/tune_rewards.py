@@ -76,7 +76,7 @@ def main():
                     help="terminal_weight: weight on terminal accuracy")
     ap.add_argument("--lambdas", type=float, nargs="+", default=[0.01],
                     help="cost scale: score points per second of acquisition")
-    ap.add_argument("--conf-bins", type=int, default=3)
+    ap.add_argument("--conf-bins", type=int, default=5)
     ap.add_argument("--n-train", type=int, default=6000)
     ap.add_argument("--n-eval", type=int, default=1500)
     ap.add_argument("--epsilon", type=float, default=0.15)
