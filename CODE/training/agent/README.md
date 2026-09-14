@@ -217,6 +217,10 @@ Figures in `docs/figures/lambda_curve/`: `lambda_operating_curve.png`, `lambda_b
 
 **The learning signal is far too weak to find the optimal subset.** The terminal reward is 0/1, so a single visit to a state carries a standard deviation of 0.449. Distinguishing two subsets that differ by 0.01 in accuracy needs ~8,000 visits to that state; at 12,000 episodes over 1024×5 states the agent gets about **16**. It can easily tell "acquire nothing" from "acquire something" (a 0.20 gap) but cannot resolve differences among the *good* subsets (0.002–0.03). Consequently the agent largely inherits the greedy choices in its seed rather than improving on them, and lands ~0.028 below the best fixed subset at λ = 0.
 
+**The episode budget is at its plateau, not beyond it.** `analysis/convergence.py` sweeps 3,000 episodes to two full passes over the training split: accuracy rises to 0.7196 at 12,000 and then stops — a full pass (36,389) gives 0.7184 and two passes 0.7116. Training longer does not help, and past ~24,000 it mildly hurts. With ε fixed at 0.185 the agent keeps exploring randomly forever, so extra episodes add noise to an already-converged table rather than refining it; a decaying ε would be the obvious fix and is untested.
+
+**Training samples whole shuffled passes, not with replacement.** Drawing N times from N collisions touches only ~63% of them, so a third of the split would never be seen at any budget. Shuffled passes give every collision equal exposure.
+
 **Seed variance dominates.** ±0.018 across seeds for the same configuration, which is larger than any hyperparameter effect measured. Any single-run number from this agent should be treated as one draw, not a measurement.
 
 **Untested:** whether Q-learning adds anything over the seed at all. Evaluating the seeded policy with zero training episodes would settle it, and given the visit-count arithmetic above it is a live possibility that training is mostly inert.

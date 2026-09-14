@@ -35,8 +35,8 @@ from bundle_costs import get_costs_dict, print_costs_summary
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--n-train", type=int, default=1000,
-                        help="Number of training episodes")
+    parser.add_argument("--n-train", type=int, default=12000,
+                        help="Training episodes. Default 12,000 episodes (~1/3 of a pass over the 36,389-collision training split). Not arbitrary: analysis/convergence.py sweeps 3k to two full passes and finds accuracy plateaus by 12,000 -- a full pass gives 0.7184 vs 0.7196 here, and two passes is slightly worse")
     parser.add_argument("--n-eval", type=int, default=500,
                         help="Number of evaluation episodes")
     parser.add_argument("--lr", type=float, default=0.1,

@@ -247,7 +247,16 @@ class QLearner:
             Dictionary with training statistics
         """
         n_samples = len(X_train)
-        episode_indices = np.random.choice(n_samples, size=n_episodes, replace=True)
+        # Shuffled passes rather than sampling with replacement. Drawing N times
+        # from N collisions with replacement touches only ~63% of them, so a
+        # third of the training split would never be seen however long training
+        # ran. Whole shuffled passes give every collision equal exposure, and a
+        # partial final pass is itself a random subset.
+        full, rest = divmod(n_episodes, n_samples)
+        episode_indices = np.concatenate(
+            [np.random.permutation(n_samples) for _ in range(full)]
+            + ([np.random.choice(n_samples, size=rest, replace=False)] if rest else [])
+        ).astype(int)
 
         pbar = tqdm(episode_indices, disable=not show_progress, desc="Training")
         for sample_idx in pbar:
