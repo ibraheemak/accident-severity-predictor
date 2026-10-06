@@ -1,0 +1,17 @@
+3 seeds, 12000 training episodes
+
+ lambda             seed only               trained   training gains
+----------------------------------------------------------------------
+   0.01        0.6888 ± 0.0066        0.7139 ± 0.0023     +0.0251
+    0.1        0.5957 ± 0.0108        0.6305 ± 0.0230     +0.0348
+    1.0        0.5860 ± 0.0089        0.6236 ± 0.0087     +0.0376
+
+per-lambda verdict (2x pooled sd):
+  lambda=0.01   +0.0251  (pooled sd 0.0070)  -> training helps
+  lambda=0.1    +0.0348  (pooled sd 0.0254)  -> no measurable effect
+  lambda=1.0    +0.0376  (pooled sd 0.0125)  -> training helps
+
+acquisition time:  seed 1.09s  ->  trained 1.63s
+distinct sets:     seed 1.0  ->  trained 10.6
+
+Saved to docs/figures/seed_vs_trained/seed_vs_trained.csv

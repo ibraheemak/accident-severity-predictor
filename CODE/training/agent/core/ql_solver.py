@@ -36,6 +36,7 @@ class QLearner:
         terminal_weight: float = 1.0,
         bundle_costs: Dict[int, float] = None,
         n_conf_bins: int = 5,
+        epsilon_final: float = None,
         seed: int = 42,
     ):
         """Initialize Q-learner.
@@ -65,6 +66,14 @@ class QLearner:
         self.terminal_weight = terminal_weight
         self.bundle_costs = bundle_costs or {i: 0.0 for i in range(10)}
         self.n_conf_bins = n_conf_bins
+        # Exploration schedule. With a constant epsilon the agent keeps taking
+        # random actions at the same rate after the table has converged, which
+        # adds noise rather than refinement -- consistent with accuracy drifting
+        # DOWN past ~24k episodes. epsilon_final enables linear decay from
+        # epsilon to epsilon_final across the training run: explore early,
+        # exploit late. None keeps the constant-epsilon behaviour.
+        self.epsilon_final = epsilon_final
+        self._eps = epsilon          # current value, updated during train()
         self.seed = seed
 
         # Q-table: Q[mask][action] = expected discounted future reward
@@ -146,7 +155,7 @@ class QLearner:
         """
         actions = self._get_actions(key[0])
 
-        if training and np.random.rand() < self.epsilon:
+        if training and np.random.rand() < self._eps:
             return int(np.random.choice(actions))
 
         q_values = [self.Q[key][a] for a in actions]
@@ -259,7 +268,10 @@ class QLearner:
         ).astype(int)
 
         pbar = tqdm(episode_indices, disable=not show_progress, desc="Training")
-        for sample_idx in pbar:
+        for step_i, sample_idx in enumerate(pbar):
+            if self.epsilon_final is not None:
+                frac = step_i / max(n_episodes - 1, 1)
+                self._eps = self.epsilon + frac * (self.epsilon_final - self.epsilon)
             env = MDPEnvironment(
                 X_train.iloc[sample_idx],
                 y_train.iloc[sample_idx],
@@ -361,6 +373,8 @@ class QLearner:
                 "lr": float(self.lr),
                 "gamma": float(self.gamma),
                 "epsilon": float(self.epsilon),
+                "epsilon_final": (None if self.epsilon_final is None
+                                  else float(self.epsilon_final)),
                 "step_weight": float(self.step_weight),
                 "terminal_weight": float(self.terminal_weight),
                 "n_conf_bins": int(self.n_conf_bins),
@@ -389,6 +403,8 @@ class QLearner:
         self.lr = hp.get("lr", hp.get("alpha", 0.1))   # "alpha" = pre-Sept-2026 name
         self.gamma = data["hyperparams"]["gamma"]
         self.epsilon = data["hyperparams"]["epsilon"]
+        self.epsilon_final = data["hyperparams"].get("epsilon_final")
+        self._eps = self.epsilon
         self.step_weight = data["hyperparams"]["step_weight"]
         self.terminal_weight = data["hyperparams"]["terminal_weight"]
         self.n_conf_bins = data["hyperparams"].get("n_conf_bins", 1)

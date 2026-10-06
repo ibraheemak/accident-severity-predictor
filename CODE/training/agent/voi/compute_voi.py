@@ -32,7 +32,9 @@ from pathlib import Path
 _AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
 sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import BUNDLE_NAMES, BUNDLE_TIERS, N_BUNDLES
-from bundle_costs import BUNDLE_COSTS
+from bundle_costs import get_costs_dict
+
+BUNDLE_COSTS = get_costs_dict()
 
 SWEEP_CSV = Path("docs/figures/bundle_sweep/bundle_sweep_normalized_binary.csv")
 OUT_DIR = Path("docs/figures/voi_sweep")

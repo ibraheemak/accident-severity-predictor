@@ -25,7 +25,9 @@ from pathlib import Path
 _AGENT = Path(__file__).resolve().parents[1]          # CODE/training/agent
 sys.path[:0] = [str(_AGENT / "core"), str(_AGENT.parent / "train")]
 from train_classifier import BUNDLE_NAMES
-from bundle_costs import BUNDLE_COSTS, BUNDLE_TIERS_COSTS
+from bundle_costs import get_costs_dict
+
+BUNDLE_COSTS = get_costs_dict(), BUNDLE_TIERS_COSTS
 
 # Validated categorical slots 1-3, matching voi/plot_voi.py.
 TIER_COLOR = {"ask_caller": "#2a78d6", "map_lookup": "#eb6834",

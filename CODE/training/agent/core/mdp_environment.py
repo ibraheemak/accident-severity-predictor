@@ -230,7 +230,11 @@ class MDPEnvironment:
     def _compute_terminal_reward(self) -> float:
         """Terminal reward: β·Accuracy(y_true, ŷ), using the β this
         environment was constructed with. Accuracy is 1 if the predicted
-        class matches the true class, 0 otherwise."""
+        class matches the true class, 0 otherwise.
+
+        A continuous alternative, β·p(y_true), was tried on 4 October 2026 to
+        test whether the 0/1 signal was limiting the agent. It was not: mean
+        -0.0064 accuracy over five lambdas, ahead at one. Removed."""
         y_pred = self.current_proba.argmax()
         return self.terminal_weight * float(y_pred == self.y_true)
 

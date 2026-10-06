@@ -2,15 +2,30 @@
 """Acquisition costs for the 10 bundles.
 
 Costs represent the real-world time required to acquire each bundle:
-- ask_caller: seconds to ask questions on the phone
-- map_lookup: milliseconds for local GIS database queries
-- external_api: milliseconds for network API calls
+- ask_caller: seconds to ask a question and hear the answer
+- map_lookup: local GIS queries against a confirmed location
+- external_api: network round trips
 
 Philosophy:
-- Caller questions are expensive (seconds to ask and listen)
+- Caller questions are expensive (a question plus the caller's answer)
 - Demographics harder than casualties (more detail to extract)
 - External APIs are cheapest (automated, parallelizable)
+
+These values treat a cost as the MARGINAL DECISION DELAY an acquisition adds,
+not the wall-clock duration of the act. A handler asks "is anyone injured?" on
+every call regardless of any model, and the questions overlap with dispatch
+rather than postponing it, so what the agent spends is the extra delay beyond
+what would have happened anyway. Read as question durations these numbers are
+far too low; read as marginal delay they are the intended quantity. State which
+definition is in use before quoting any acquisition time.
+
+Only the RATIOS matter to the learned policy. The reward uses
+C_i = lambda * seconds_i, so scaling every cost by k and dividing lambda by k
+leaves C_i -- and the policy -- identical.
 """
+
+import json
+import os
 
 # Bundle costs in seconds
 BUNDLE_COSTS = {
@@ -39,14 +54,30 @@ BUNDLE_TIERS_COSTS = {
 }
 
 def get_costs_dict() -> dict:
-    """Return bundle costs as {bundle_index: cost_seconds}."""
-    return BUNDLE_COSTS.copy()
+    """Return bundle costs as {bundle_index: cost_seconds}.
+
+    RL_BUNDLE_COSTS, if set, overrides the table above. It holds a JSON object
+    keyed by bundle index, e.g. '{"0": 5, "1": 8, "2": 20}' -- keys given are
+    replaced, keys omitted keep their value here. This exists so a cost
+    SENSITIVITY sweep can vary the assumption across runs without rewriting
+    this file between them, which would make it impossible to tell afterwards
+    which costs produced which output directory.
+
+    It is an override for sweeps, not a way to pick a flattering setting: any
+    analysis using it has to report every model it ran, not the best one.
+    """
+    costs = BUNDLE_COSTS.copy()
+    raw = os.environ.get("RL_BUNDLE_COSTS")
+    if raw:
+        costs.update({int(k): float(v) for k, v in json.loads(raw).items()})
+    return costs
 
 def print_costs_summary():
     """Print cost summary by tier."""
     import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
+    # train_classifier lives at CODE/training/train, two levels up from core/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "train"))
     from train_classifier import BUNDLE_NAMES
 
     print("\nBundle Acquisition Costs:")
