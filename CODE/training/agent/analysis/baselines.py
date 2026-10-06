@@ -112,15 +112,21 @@ def path_predictions(order, splits):
 def random_acquisition(test_acc, budget, n_samples=4000, rng=None):
     """Spend the budget on randomly chosen bundles.
 
-    Shuffle the ten bundles and take them in that order while the next one
-    still fits, then predict. Averaged over many shuffles, this is what a
-    policy gets for spending the SAME time without choosing well -- so the gap
-    between it and any real policy is the value of the choice itself, separated
-    from the value of the acquisition.
+    Shuffle the ten bundles, take them in that order, and STOP as soon as the
+    next one would exceed the budget. Averaged over many shuffles, this is what
+    a policy gets for spending the same time without choosing well.
 
-    The counterpart baselines answer different questions: no-acquisition is the
-    floor for spending nothing, and static priority spends the budget in a
-    deliberate order. This one spends it blindly.
+    Stopping, rather than skipping the unaffordable bundle and carrying on, is
+    what makes this a clean ablation of static_priority: that baseline also
+    takes the longest affordable PREFIX of its order, so the only thing
+    differing between the two is the order itself. Skipping would change the
+    stopping rule as well, and the gap between them would no longer isolate the
+    value of ordering well.
+
+    Note the consequence: a shuffle that opens with an expensive bundle stops
+    immediately and acquires nothing, so this is a weaker null than a
+    skip-and-continue version would be. That is the correct behaviour for the
+    comparison being made, not a convenience.
 
     Cheap, because every subset's accuracy is already in the sweep -- only the
     mask has to be simulated, not the classifier.
@@ -131,9 +137,10 @@ def random_acquisition(test_acc, budget, n_samples=4000, rng=None):
         mask, spent = 0, 0.0
         for i in rng.permutation(N_BUNDLES):
             c = BUNDLE_COSTS[i]
-            if spent + c <= budget + 1e-9:
-                mask |= 1 << int(i)
-                spent += c
+            if spent + c > budget + 1e-9:
+                break
+            mask |= 1 << int(i)
+            spent += c
         out[k] = test_acc[mask]
     return float(out.mean())
 
