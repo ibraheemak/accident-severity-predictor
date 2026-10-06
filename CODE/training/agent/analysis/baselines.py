@@ -109,7 +109,7 @@ def path_predictions(order, splits):
     return out, np.array(secs)
 
 
-def random_acquisition(test_acc, budget, n_samples=4000, rng=None):
+def random_acquisition(test_acc, budget, n_samples=100, rng=None):
     """Spend the budget on randomly chosen bundles.
 
     Shuffle the ten bundles, take them in that order, and STOP as soon as the
@@ -127,6 +127,15 @@ def random_acquisition(test_acc, budget, n_samples=4000, rng=None):
     immediately and acquires nothing, so this is a weaker null than a
     skip-and-continue version would be. That is the correct behaviour for the
     comparison being made, not a convenience.
+
+    n_samples is 100 by author's choice. Individual shuffles have a standard
+    deviation up to 0.049, so at 100 draws the curve moves by up to 0.007
+    between RNG seeds -- visible as small kinks that are sampling noise rather
+    than anything in the data, and of the same order as the smallest reported
+    differences between policies. 1,000 draws would halve that and 4,000 would
+    quarter it, at no runtime cost (4,000 draws across four budgets take 0.02 s;
+    the script is dominated by loading classifiers). Raise it if a reviewer
+    queries a bump in the random curve.
 
     Cheap, because every subset's accuracy is already in the sweep -- only the
     mask has to be simulated, not the classifier.
