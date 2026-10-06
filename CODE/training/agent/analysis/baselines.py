@@ -65,8 +65,13 @@ def value_per_second_order(scores) -> list:
 
     Marginal value is what a bundle ADDS on average over all subsets lacking
     it; dividing by its acquisition time gives the greedy knapsack ordering.
-    Bundles whose marginal value is negative (meteo) are dropped -- taking them
-    is never right at any budget.
+
+    All ten bundles are ranked, including any whose marginal value is negative
+    (meteo is, at -0.00076). A negative ratio sorts last, so such a bundle is
+    only ever reached at a budget large enough to have taken everything else
+    first -- the ordering demotes it rather than forbidding it. Dropping it
+    instead would make the baseline a policy that already knows which bundles
+    are worthless, which is knowledge the agent has to acquire for itself.
 
     Computed from whatever `scores` is keyed on, which the caller passes as a
     VALIDATION column.
@@ -76,8 +81,8 @@ def value_per_second_order(scores) -> list:
         bit = 1 << i
         out[name] = np.mean([scores[m | bit] - scores[m]
                              for m in range(1 << N_BUNDLES) if not m & bit])
-    return [b for b in sorted(out, key=lambda b: out[b] / BUNDLE_COSTS[BUNDLE_NAMES.index(b)],
-                              reverse=True) if out[b] > 0]
+    return sorted(out, key=lambda b: out[b] / BUNDLE_COSTS[BUNDLE_NAMES.index(b)],
+                  reverse=True)
 
 
 def path_predictions(order, splits):
