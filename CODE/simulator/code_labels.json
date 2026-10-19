@@ -1,0 +1,80 @@
+{
+ "urban_or_rural_area": {
+  "1": "Urban",
+  "2": "Rural",
+  "3": "Unallocated"
+ },
+ "light_conditions": {
+  "1": "Daylight",
+  "4": "Darkness - lights lit",
+  "5": "Darkness - lights unlit",
+  "6": "Darkness - no lighting",
+  "7": "Darkness - lighting unknown"
+ },
+ "weather_conditions": {
+  "1": "Fine no high winds",
+  "2": "Raining no high winds",
+  "3": "Snowing no high winds",
+  "4": "Fine + high winds",
+  "5": "Raining + high winds",
+  "6": "Snowing + high winds",
+  "7": "Fog or mist",
+  "8": "Other"
+ },
+ "road_type": {
+  "1": "Roundabout",
+  "2": "One way street",
+  "3": "Dual carriageway",
+  "6": "Single carriageway",
+  "7": "Slip road"
+ },
+ "first_road_class": {
+  "1": "Motorway",
+  "2": "A(M)",
+  "3": "A",
+  "4": "B",
+  "5": "C",
+  "6": "Unclassified"
+ },
+ "second_road_class": {
+  "0": "Not at junction or within 20 metres",
+  "1": "Motorway",
+  "2": "A(M)",
+  "3": "A",
+  "4": "B",
+  "5": "C",
+  "6": "Unclassified"
+ },
+ "junction_detail": {
+  "0": "Not at junction or within 20 metres",
+  "13": "T or staggered junction",
+  "16": "Crossroads",
+  "17": "Junction with more than four arms (not roundabout)",
+  "18": "Using private drive or entrance",
+  "19": "19",
+  "99": "unknown (self reported)"
+ },
+ "junction_control": {
+  "0": "Not at junction or within 20 metres",
+  "1": "Authorised person",
+  "2": "Auto traffic signal",
+  "3": "Stop sign",
+  "4": "Give way or uncontrolled",
+  "9": "unknown (self reported)"
+ },
+ "pedestrian_crossing": {
+  "0": "No physical crossing facility within 50m",
+  "11": "Human crossing control by school crossing patrol",
+  "12": "Human crossing control by other authorised person",
+  "13": "Zebra crossing",
+  "14": "Pedestrian light crossing (pelican or puffin or toucan or similar)",
+  "15": "Pedestrian phase at traffic signal",
+  "16": "Footbridge or subway",
+  "17": "Central refuge - no other controls",
+  "99": "unknown (self reported)"
+ },
+ "trunk_road_flag": {
+  "1": "Trunk (Roads managed by Highways England)",
+  "2": "Non-trunk"
+ }
+}
