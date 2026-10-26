@@ -1,223 +1,130 @@
 # Predicting Road Accident Severity in the UK
 ### A Multi-Source Machine Learning Approach
 
-> **Course:** Project in Artificial Intelligence (02360502) — Spring 2026  
-> **Students:** Ibraheem Akaree : ibraheema@campus.technion.ac.il , Sewar Abahry :sewar.abahry@campus.technion.ac.il  
+> **Course:** Project in Artificial Intelligence (02360502) — Spring 2026
+
+> **Students:** Ibraheem Akaree — ibraheema@campus.technion.ac.il · Sewar Abahry — sewar.abahry@campus.technion.ac.il
+
 > **Advisor:** Yotam Gavish
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Problem Statement](#problem-statement)
-- [Solution Architecture](#solution-architecture)
-  - [Multiclass Classification](#multiclass-classification)
-  - [Feature Engineering Pipeline](#feature-engineering-pipeline)
-  - [Active Feature Acquisition (RL)](#active-feature-acquisition-rl)
-- [Data Sources](#data-sources)
-- [System Components](#system-components)
-- [Evaluation & Baselines](#evaluation--baselines)
-- [Research Extensions](#research-extensions)
-- [Setup & Installation](#setup--installation)
 
 ---
 
 ## Overview
 
-This project builds an intelligent severity prediction system for road traffic accidents in Great Britain. Given only the information available in the first moments after a 999 call, the system predicts the severity of the accident and decides — in real time — which additional data is worth acquiring before making a final prediction.
+When an accident is reported to emergency services, a dispatcher has seconds to decide what level of response to send. This project asks:
 
-The system combines supervised classification with a Reinforcement Learning (RL) agent that dynamically trades off prediction accuracy against data acquisition cost and latency.
+> *Given only what is known at the moment of a 999 call, can we predict how severe the accident is — and is it worth spending time finding out more before deciding?*
 
----
-
-## Problem Statement
-
-When an accident is reported to emergency services, dispatchers must decide within seconds what level of response to send. This project addresses the question:
-
-> *Given only the information available at the moment of a 999 call, can we accurately predict accident  severity?*
-
-An accurate severity predictor at dispatch centres could optimise emergency resource allocation, reduce response times, and ultimately save lives.
+Two halves answer that. A bank of classifiers predicts severity from whatever information is currently held. On top of them sits a reinforcement learning agent that decides, call by call, **which further information is worth acquiring** before committing to a prediction — because every question to a caller and every lookup costs time a dispatcher does not have.
 
 ---
 
-## Solution Architecture
+## How it works
 
-### Classification
+![Project architecture](docs/figures/pipeline/architecture.png)
 
-The target variable is the STATS19 `collision_severity` field (Fatal / Serious / Slight), also trained as a binary Slight-vs-Severe task. A supervised classifier is trained **per acquisition subset** — one for every combination of the acquisition bundles defined below — and frozen before RL training begins. These classifiers are the environment the RL agent acts on.
+**Offline.** Four public sources are joined into one feature table per collision. The features are grouped into **10 acquisition bundles**, each standing for one real-world act — a question to the caller, a lookup against the coordinate, or an API call. Every combination of those bundles gets its own classifier, giving **1,024 pre-trained models** that are frozen before any agent training starts. Those models *are* the environment the agent acts in, and a Q-learning agent is trained over them to produce an acquisition policy.
 
-> **Design revision (August 2026).** This was originally *eight* classifiers, one per subset of the three external sources (OSM / AADF / Weather), each trained on randomly masked STATS19 fields to cope with partial inputs. Both halves of that design were replaced:
->
-> - **Random masking was dropped.** Training on masked copies cost accuracy at every level of missingness relative to training a dedicated model per subset, and it made every headline metric a pooled average across missingness levels rather than a number about any real deployment scenario. The `masked` data variant and `generate_masked_splits.R` still exist for reference (see `docs/data_pipeline.md` §13) but are no longer used.
-> - **The action space was widened past the three external sources.** Those three turned out to carry very little of the available signal, so the STATS19 fields became acquirable too. Since one action per field means 2^31 classifiers, fields are grouped into **10 bundles**, giving a tractable 2^10 = 1024 pre-trained classifiers.
+**Online.** A call arrives carrying only a timestamp. Each time a bundle is acquired, the classifier matching exactly the bundles now held re-predicts — so a prediction always exists, and its confidence is part of what the policy reads. The policy looks at what is held and how confident that prediction is, then either asks for one more bundle or stops. Stopping commits to the prediction already in hand rather than computing a new one.
 
-### Feature Engineering Pipeline
 
-Rather than relying solely on STATS19, each accident record is enriched with three external sources requiring non-trivial spatial or temporal joining logic:
+---
 
-| Source | Features Added | Join Method |
-|--------|---------------|-------------|
-| **OpenStreetMap** | Speed cameras, lane count, road dividers, street lighting | Spatial radius query |
-| **DfT AADF Traffic** | Annual Average Daily Flow (road busyness) | Spatial nearest-neighbour (500m) |
-| **Open-Meteo Historical** | Temperature, precipitation, wind speed, visibility, humidity, snowfall | API call by lat/lon + datetime |
+## Data sources
 
-### Active Feature Acquisition (RL)
-
-The system is extended into an **Active Feature Acquisition (AFA)** framework modelled as a Markov Decision Process (MDP), solved with Reinforcement Learning.
-
-#### The acquisition bundles
-
-An action is not a single column but one **real-world acquisition act**: one question put to the caller, one lookup against the collision coordinate, or one external API call. Features are grouped accordingly, which is both what makes the cost model defensible and what cuts the classifier count from 2^31 to 2^10.
-
-| Kind | Bundle | Features |
+| Source | Role | Cost |
 |---|---|---|
-| **Ask the caller** | `vehicles` | `number_of_vehicles` + 7 vehicle-type flags |
-| | `casualties` | How many hurt, and who: pedestrian / driver / passenger / motorcyclist / cyclist counts |
-| | `casualty_demographics` | Youngest & oldest age, child / elderly / female counts |
-| **Map lookup** | `road_class` | Road class & number (1st + 2nd), road type, trunk-road flag |
-| | `road_environment` | Speed limit, urban/rural, light conditions, weather conditions |
-| | `junction` | Junction detail & control, pedestrian crossing |
-| | `crash_history` | Spatial risk density: prior-year accident rate, severe fraction and fatal rate within 500 m, distance to nearest prior accident |
-| **External API** | `osm` | Traffic calming, signals, lane count, median, speed camera |
-| | `aadf` | Annual Average Daily Flow, distance to count point |
-| | `meteo` | Temperature, precipitation, wind, weather code, snowfall, snow depth |
+| [STATS19 (DfT)](https://github.com/ropensci/stats19) | Primary dataset and labels | Free |
+| [DfT AADF Traffic](https://roadtraffic.dft.gov.uk/downloads) | Traffic volume at the nearest count point | Free |
+| [OpenStreetMap](https://overpass-api.de) | Road infrastructure — signals, lanes, calming, cameras | Free |
+| [Open-Meteo Historical](https://open-meteo.com/en/docs/historical-weather-api) | Weather at the exact location and hour | Paid |
 
-**Each bundle is an independent action with its own independently-settable acquisition cost `C_i`.** The "Kind" column is a descriptive label for analysis only — it does not group actions into one step, and bundles of the same kind are not required to cost the same. The cost values themselves are defined as part of the RL work, not yet set.
-
-**Free (no acquisition needed):** the call timestamp only — day-of-week and hour, cyclically encoded. At the moment the phone rings, nothing else is known without asking or looking it up. Every bundle is strictly *additive*: acquiring one can only add information, never remove it.
-
-**State:** `s_t = (x_free, x_acquired, m_t, p_t)`
-- `x_free` — the call timestamp, available automatically
-- `x_acquired` — bundles acquired so far during the episode
-- `m_t` — 10-bit mask of which bundles have been obtained (also the cache key for the matching frozen classifier)
-- `p_t` — current predicted probability distribution over severity classes
-
-**Actions:**
-- `A0` — **Predict & Terminate** (use current `p_t` as final output)
-- `A1…A10` — **Acquire bundle *i***, at that bundle's tier cost
-
-**Reward Function:**
-
-```
-Reward = R_terminal + Σ R_step(t)
-
-R_step(t) = α · ΔConfidence_t − C_i
-R_terminal = β · Accuracy(ŷ, y)
-```
-
-- `ΔConfidence_t` — reduction in prediction entropy after acquiring feature `i`
-- `C_i` — acquisition cost (higher for external APIs than STATS19 fields)
-- `Accuracy(ŷ, y)` — Macro F1-score against ground truth, delivered at termination
-- `α`, `β` — tunable weighting parameters (α ≪ β)
+STATS19 links three tables by collision reference: **collisions** (location, time, road, conditions, severity), **casualties** (age, sex, class, injury), and **vehicles** (type, manoeuvre, driver). Only collision-level and aggregated casualty/vehicle facts a dispatcher could plausibly learn during a call are used as features.
 
 ---
 
-## Data Sources
-
-| Source | URL | Role | Cost |
-|--------|-----|------|------|
-| STATS19 (DfT) | [github.com/ropensci/stats19](https://github.com/ropensci/stats19) | Primary dataset + labels | Free |
-| DfT AADF Traffic | [roadtraffic.dft.gov.uk/downloads](https://roadtraffic.dft.gov.uk/downloads) | Traffic volume feature | Free |
-| OpenStreetMap | [overpass-api.de](https://overpass-api.de) | Road infrastructure features | Free |
-| Open-Meteo Historical | [open-meteo.com](https://open-meteo.com/en/docs/historical-weather-api) | Hourly weather at exact location | Paid (€99 Professional) |
-
-### STATS19 Tables
-
-The primary dataset links three tables via `accident_index`:
-
-- **Accidents** — location (lat/lon), date/time, road type, weather, light conditions, speed limit, junction type, severity
-- **Casualties** — age, sex, casualty class, injury severity per person
-- **Vehicles** — vehicle type, manoeuvre, driver age, engine capacity
-
----
-
-## System Components
+## Repository structure
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  1. Data Acquisition                                    │
-│     Downloads STATS19 + DfT AADF; caches OSM & Weather │
-├─────────────────────────────────────────────────────────┤
-│  2. Feature Engineering Pipeline                        │
-│     Spatial + temporal joins; annotates acquisition     │
-│     costs per feature                                   │
-├─────────────────────────────────────────────────────────┤
-│  3. Preprocessing Module                                │
-│     Missing value imputation, encoding, normalisation   │
-├─────────────────────────────────────────────────────────┤
-│  4. Classifier Training (×1024)                         │
-│     One model per acquisition-bundle subset, cached to  │
-│     models/subsets/ ; frozen before RL training begins  │
-├─────────────────────────────────────────────────────────┤
-│  5. Evaluation & Experiment Runner 1 (pre-RL)           │
-│     Ablation study, leakage audit, officer vs. data     │
-│     gap, temporal drift analysis                        │
-├─────────────────────────────────────────────────────────┤
-│  6. RL Agent Training                                   │
-│     AFA policy trained over frozen classifier env.      │
-│     One episode = one accident record                   │
-├─────────────────────────────────────────────────────────┤
-│  7. Evaluation & Experiment Runner 2 (post-RL)          │
-│     RL agent vs. 3 baselines; tables + plots            │
-├─────────────────────────────────────────────────────────┤
-│  8. Inference Pipeline                                  │
-│     Live accident → RL policy → real-time API calls     │
-│     → predicted severity + confidence score             │
-└─────────────────────────────────────────────────────────┘
+CODE/
+├── run_pipeline.R          orchestrates the R data pipeline only — the two
+│                           folders below it. Training is run separately.
+│
+├── downloading/            STATS19 download and severity-aware sampling
+├── processing/             the R feature pipeline
+│   ├── stats19/              collision, vehicle and casualty feature builders
+│   └──  aadf/  osm/  meteo/   one folder per external source
+│   
+│
+├── training/
+│   ├── train/              classifiers — including the 1,024-model sweep
+│   ├── tune/               hyperparameter search for the classifier
+│   └── agent/              the RL acquisition agent  (own README)
+│
+├── simulator/              browser tool to watch the agent on one call (own README)
+└── experiments/            one-off analyses: leakage audit, officer vs. data,
+                            temporal drift, model comparison
+
+data/
+├── raw/                    one folder per source, as downloaded
+├── features/               sequential pipeline stages, named by sources folded in
+└── splits/                 train/valid/test, and their normalized form
+
+docs/
+├── data_pipeline.md        the detailed pipeline reference
+└── figures/                every figure and results table
+
+models/                     trained models (gitignored — regenerate from the sweep)
 ```
 
----
-
-## Evaluation & Baselines
-
-The RL agent is benchmarked against three baselines:
-
-| Baseline | Description | Cost | Accuracy |
-|----------|-------------|------|----------|
-| **No-Acquisition** | Classifier on the free timestamp only | Zero | Lower bound |
-| **Full-Acquisition** | Always acquires all 10 bundles | Maximum | Upper bound |
-| **Best Fixed Subset** | The single best-scoring subset at the RL agent's average budget, chosen offline from the sweep below | Same as RL (avg) | Cannot adapt per-accident |
-| **Static Feature Priority** | Fixed acquisition *order*, stopping at the RL agent's average budget | Same as RL (avg) | Cannot adapt per-accident |
-
-**Best Fixed Subset is the baseline that matters.** Because all 1024 classifiers are pre-trained, the best non-adaptive policy at any budget is directly computable. The RL agent only justifies itself if it beats that — i.e. only if the *right* subset genuinely differs from one collision to the next.
-
-### Value-of-Information Curve (1024-subset sweep)
-
-`CODE/training/train/bundle_sweep.py` trains all 1024 acquisition subsets (binary Slight-vs-Severe, `normalized` variant, ~29 min) and caches them to `models/subsets/`. Results:
-
-**Timestamp only: 0.5487 valid / 0.5408 test macro F1 → full acquisition: 0.7406 / 0.7377.** The whole action space is worth **+0.19 macro F1**.
-
-Mean marginal value of each bundle, averaged over all 512 subsets that lack it:
-
-| Bundle | Kind | Mean marginal | Alone | Helps in |
-|---|---|---|---|---|
-| `casualties` | ask caller | **+0.0402** | +0.106 | 100% of subsets |
-| `vehicles` | ask caller | **+0.0351** | +0.093 | 100% |
-| `casualty_demographics` | ask caller | **+0.0319** | +0.088 | 100% |
-| `road_environment` | map lookup | +0.0097 | +0.070 | 98% |
-| `crash_history` | map lookup | +0.0079 | +0.067 | 96% |
-| `junction` | map lookup | +0.0061 | +0.052 | 95% |
-| `road_class` | map lookup | +0.0056 | +0.057 | 88% |
-| `osm` | external API | +0.0032 | +0.046 | 81% |
-| `aadf` | external API | +0.0015 | +0.035 | 68% |
-| `meteo` | external API | −0.0008 | +0.002 | 36% |
-
-Two findings shape the RL problem:
-
-1. **What the caller tells you dominates.** The three caller bundles are worth 4–25× any lookup or API bundle, and they are the only ones that help in *every* context. The external sources contribute very little — which is what motivated widening the action space to the STATS19 fields in the first place.
-2. **Value saturates at about five bundles.** The three caller bundles plus `road_class` and `road_environment` reach 0.7364 test — statistically indistinguishable from acquiring all ten (0.7377). Past that point every further bundle is worth ≤ +0.004, and the ranking among the top subsets is within noise.
-
-**Open question this raises.** These are *population-average* values, so they describe the best **fixed** policy. If the right subset is much the same for every collision, an adaptive agent cannot beat a hardcoded five-bundle rule and the AFA framing has no headroom. Measuring the gap between a per-instance oracle and the best fixed subset — cheap, since all 1024 models are cached — is the next step, and it gates the RL work.
+**Everything runs from the repository root.** Paths inside the scripts resolve against the working directory, not against the script's own location.
 
 ---
 
-## Research Extensions
+## Running it
 
-- **Confidence Scores** — Calibrated uncertainty estimates flagging low-confidence predictions (especially Fatal/Serious) for human review.
-- **Leakage Audit** — Measures the accuracy gap between a model trained on all STATS19 features vs. only dispatch-time features, quantifying the real-world deployability cost.
-- **Ablation Study / Value-of-Information Curve** — Full evaluation of all 1024 bundle subsets (`CODE/training/train/bundle_sweep.py`) to isolate each bundle's independent and combined contribution; results inform cost penalty calibration `C_i`. See below.
-- **Officer vs. Data Gap** — Compares the subjective STATS19 weather field (filled by the attending officer) against objective Open-Meteo measurements at the same location and time.
-- **Temporal Drift** — Trains on earlier STATS19 years and tests on recent ones to assess stability of accident severity patterns over time.
+The data pipeline and the models are two separate stages. The first prepares
+the data and stops; nothing downstream runs automatically.
 
-#hello
+```bash
+# 1. Data engineering only: download, join, engineer features, split, normalise
+Rscript CODE/run_pipeline.R
+
+# 2. Python environment
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Train the 1,024 acquisition-subset classifiers (resumable)
+python CODE/training/train/bundle_sweep.py
+
+# 4. Train the acquisition agent over them, once per cost setting.
+#    There is no single agent: lambda prices a second of acquisition in
+#    accuracy, and each value gives a different, equally valid policy. The
+#    reported results sweep it, 3 seeds per value.
+python CODE/training/agent/analysis/lambda_curve.py                      # lambda 0 .. 0.10
+python CODE/training/agent/analysis/lambda_curve.py \
+       --lambdas 0.2 0.3 0.5 1 2 3 5 10 \
+       --out-dir docs/figures/lambda_curve_log                           # the sparse tail
+python CODE/training/agent/analysis/plot_lambda_curve.py                 # combine + figures
+
+#    To train one agent at one lambda instead:
+#      --warm-start seeds the Q-table from the sweep's measured subset scores,
+#      rather than from zeros, which does not learn on this problem.
+python CODE/training/agent/train_rl_agent.py --warm-start --cost-scale 0.01
+
+# 5. Watch it work on a single call, in a browser
+python CODE/simulator/app.py
+```
+
+Most R stages accept `--debug` for a fast smoke test on a few rows.
+
+---
+
+## Where to read more
+
+| | |
+|---|---|
+| The data pipeline, stage by stage | `docs/data_pipeline.md` |
+| The acquisition agent | `CODE/training/agent/README.md` |
+| The simulator | `CODE/simulator/README.md` |
+| Results, figures and tables | `docs/figures/` |
